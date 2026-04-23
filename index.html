@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📜 古人八卦卡收集冊</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+    <style>
+        body {
+            font-family: '微軟正黑體', sans-serif;
+            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+            color: #333; margin: 0; padding: 20px; text-align: center; min-height: 100vh;
+            transition: background 0.5s, color 0.5s;
+        }
+        
+        /* 😈 暗黑模式 */
+        body.dark-mode { background: linear-gradient(135deg, #1e272e 0%, #2d3436 100%); color: #d2dae2; }
+        body.dark-mode h1 { color: #ff3f34; text-shadow: 2px 2px 0px #808e9b; }
+        body.dark-mode .subtitle { color: #a4b0be; }
+        body.dark-mode .card { background: #485460; border-color: #ff3f34; box-shadow: 0 10px 20px rgba(0,0,0,0.5); }
+        body.dark-mode .card:hover { border-color: #ffdd59; box-shadow: 0 15px 30px rgba(255, 63, 52, 0.4); }
+        body.dark-mode .name { color: #ffdd59; }
+        body.dark-mode .title { background: #1e272e; color: #ff3f34; }
+        body.dark-mode .stat-label { color: #d2dae2; }
+        body.dark-mode .stat-bar-bg { background: #1e272e; }
+
+        h1 { color: #d81b60; font-size: 2.8em; text-shadow: 2px 2px 0px #ffb4a2; margin-bottom: 10px; transition: color 0.5s; }
+        .subtitle { font-size: 1.2em; color: #555; margin-bottom: 20px; font-weight: bold; }
+        
+        /* 🗂️ 分頁按鈕 */
+        .tabs { display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;}
+        .tab-btn { background: #fff; color: #333; border: 3px solid #ddd; padding: 10px 25px; font-size: 1.2em; border-radius: 30px; cursor: pointer; font-weight: bold; transition: all 0.3s; }
+        .tab-btn:hover { transform: translateY(-3px); }
+        .tab-btn.active-normal { background: #ff4757; color: white; border-color: #ff4757; box-shadow: 0 5px 15px rgba(255, 71, 87, 0.4); }
+        .tab-btn.active-dark { background: #ff3f34; color: white; border-color: #1e272e; box-shadow: 0 5px 15px rgba(255, 63, 52, 0.6); }
+
+        /* 🔍 搜尋與篩選區 */
+        .controls { display: flex; justify-content: center; gap: 15px; margin-bottom: 30px; flex-wrap: wrap; }
+        .control-item {
+            padding: 12px 20px; font-size: 1.1em; border-radius: 25px; border: 3px solid #ddd; 
+            outline: none; font-family: '微軟正黑體', sans-serif; font-weight: bold;
+            transition: all 0.3s;
+        }
+        .control-item:focus { border-color: #ff4757; box-shadow: 0 0 10px rgba(255,71,87,0.2); }
+        body.dark-mode .control-item { background: #2d3436; color: #ffdd59; border-color: #ff3f34; }
+        body.dark-mode .control-item:focus { border-color: #ffdd59; }
+        #searchInput { width: 250px; }
+
+        .container { display: flex; flex-wrap: wrap; justify-content: center; gap: 25px; max-width: 1200px; margin: 0 auto; }
+        
+        /* 卡片設計 */
+        .card { background: white; border-radius: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.08); width: 280px; padding: 20px; cursor: pointer; position: relative; transition: all 0.3s; border: 4px solid #fff; display: flex; flex-direction: column; align-items: center; }
+        .card:hover { transform: translateY(-10px) rotate(2deg); border-color: #ffd32a; }
+        .dynasty { background: #2f3542; color: #fff; font-size: 0.85em; font-weight: bold; padding: 5px 12px; border-radius: 15px; margin-bottom: 10px; letter-spacing: 2px; }
+        .avatar { font-size: 60px; margin: 5px 0; filter: drop-shadow(0px 5px 5px rgba(0,0,0,0.2)); }
+        .name { font-size: 1.8em; font-weight: 900; color: #2f3542; }
+        .title { font-size: 1em; color: #747d8c; margin-bottom: 15px; background: #f1f2f6; padding: 5px; border-radius: 10px; }
+        .stats-container { text-align: left; margin-top: 10px; font-size: 0.9em; font-weight: bold; color: #57606f; width: 100%; }
+        .stat-row { display: flex; align-items: center; margin-bottom: 6px; }
+        .stat-label { width: 65px; }
+        .stat-bar-bg { flex-grow: 1; background: #dfe4ea; border-radius: 10px; height: 10px; overflow: hidden; margin-left: 10px; }
+        .stat-bar-fill { height: 100%; border-radius: 10px; }
+        .like-section { display: flex; justify-content: center; align-items: center; margin-top: 15px; gap: 10px; width: 100%; }
+        .like-btn { background: #ff6b81; border: none; color: white; border-radius: 50%; width: 40px; height: 40px; font-size: 20px; cursor: pointer; transition: transform 0.2s; }
+        .like-btn:hover { transform: scale(1.2); }
+        .like-count { font-size: 1.2em; font-weight: bold; color: #ff6b81; }
+        .no-result { font-size: 1.5em; color: #888; margin-top: 50px; width: 100%; font-weight: bold; }
+        
+        /* 彈出視窗 */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; z-index: 100; }
+        .modal-content { background: white; padding: 30px; border-radius: 20px; max-width: 500px; width: 100%; text-align: left; position: relative; line-height: 1.6; color: #333; animation: popIn 0.3s; max-height: 80vh; overflow-y: auto;}
+        body.dark-mode .modal-content { background: #2d3436; color: #f1f2f6; border: 3px solid #ff3f34; }
+        @keyframes popIn { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        .close-btn { position: absolute; top: 15px; right: 20px; font-size: 28px; cursor: pointer; color: #aaa; font-weight: bold; }
+        .close-btn:hover { color: red; }
+        .gossip-text { font-size: 1.1em; margin-top: 10px;}
+        .secret-stamp { color: red; border: 3px solid red; padding: 5px 10px; display: inline-block; transform: rotate(-15deg); font-weight: 900; font-size: 1.2em; margin-bottom: 10px; border-radius: 5px; opacity: 0.8; }
+    </style>
+</head>
+<body>
+
+    <h1 id="mainTitle">📜 古人八卦卡收集冊 🤫</h1>
+    <div class="subtitle" id="subTitle">來看看古代網紅們的真面目！</div>
+    
+    <div class="tabs">
+        <button id="btnNormal" class="tab-btn active-normal" onclick="switchTab('normal')">🌟 網紅吃瓜區</button>
+        <button id="btnDark" class="tab-btn" onclick="switchTab('dark')">😈 歷史黑料區</button>
+    </div>
+
+    <div class="controls">
+        <input type="text" id="searchInput" class="control-item" placeholder="🔍 搜尋古人名字或稱號..." oninput="renderCards()">
+        
+        <select id="dynastyFilter" class="control-item" onchange="renderCards()">
+            <option value="all">📜 全部朝代</option>
+            <option value="上古">上古 / 商周</option>
+            <option value="春秋">春秋</option>
+            <option value="戰國">戰國</option>
+            <option value="秦">秦朝</option>
+            <option value="漢">漢朝 (西漢/東漢)</option>
+            <option value="三國">三國</option>
+            <option value="晉">晉朝</option>
+            <option value="南北朝">南北朝</option>
+            <option value="隋">隋朝</option>
+            <option value="唐">唐朝</option>
+            <option value="宋">宋朝 (北宋/南宋)</option>
+            <option value="遼">遼國</option>
+            <option value="元">元朝</option>
+            <option value="明">明朝</option>
+            <option value="清">清朝</option>
+            <option value="近代">近代</option>
+        </select>
+    </div>
+
+    <div class="container" id="cardContainer"></div>
+
+    <div class="modal" id="gossipModal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <div class="secret-stamp" id="stampText">絕對機密 TOP SECRET</div>
+            <h2 id="modalName" style="margin-top: 0;"></h2>
+            <div id="modalGossip" class="gossip-text"></div>
+        </div>
+    </div>
+
+<script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAuoDjc3PGPkQMrWEhg7o1_gQm7KT1mj4g",
+            authDomain: "others-a24d9.firebaseapp.com",
+            projectId: "others-a24d9",
+            storageBucket: "others-a24d9.firebasestorage.app",
+            messagingSenderId: "591407409494",
+            appId: "1:591407409494:web:8bb23e4cfd134a7b3b0ef7",
+            measurementId: "G-RCT1E09PSQ"
+        };
+
+        let db;
+        try {
+            if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+        } catch (error) { console.warn("Firebase 尚未設定完成"); }
+
+        // ==========================================
+        // ⏳ 歷史時間軸：教電腦認識朝代先後順序
+        // ==========================================
+        const dynastyTimeline = [
+            "上古", "商朝", "西周", "東周", "春秋", "戰國", 
+            "秦朝", "秦末", "西漢", "東漢", "東漢末", "三國", 
+            "西晉", "東晉", "晉朝", "南北朝", 
+            "隋朝", "唐朝", "五代", "遼國", 
+            "北宋", "南宋", "宋朝", "元朝", 
+            "明朝", "清朝", "近代"
+        ];
+
+        // ==========================================
+        // 🌟 正面/搞笑八卦區 (請貼上您完整的網紅名單)
+        // ==========================================
+        const normalPeople = [
+            {
+                dynasty: "上古", name: "黃帝", avatar: "🧭", title: "上古最強發明家", color: "#fdcb6e", likes: 0,
+                stats: { "統御力": 100, "發明力": 100, "修仙力": 95 },
+                gossip: "<b>🚗 八卦1：古代的 GPS 工程師！</b><br>打仗時遇到大霧迷路，他居然發明了「指南車」，不管車子怎麼轉，車上的木頭人永遠指著南方，根本是上古時代的導航系統！<br><br><b>🐉 八卦2：搭乘專屬神龍升天？</b><br>傳說他晚年在鑄造大鼎後，天上突然降下一條黃龍，他直接帶著七十多個大臣騎上龍背飛上天當神仙了，超級魔幻！"
+            },
+            {
+                dynasty: "商朝", name: "姜子牙", avatar: "🎣", title: "史上最老釣客", color: "#74b9ff", likes: 0,
+                stats: { "耐心力": 100, "釣魚力": 99, "兵法力": 100 },
+                gossip: "<b>🐟 八卦1：釣魚從不放魚餌？</b><br>傳說他釣魚用的是直的魚鉤，而且從不放魚餌！名言是「姜太公釣魚，願者上鉤」，結果他竟然用這招「釣」到了一個周文王幫他大老闆！<br><br><b>👴 八卦2：大器晚成的天花板！</b><br>七八十歲還在河邊發呆，出山後直接當上總司令幫周朝打下天下，真的是活到老狂到老的代表作！"
+            },
+
+            // --- 📜 春秋戰國時期 ---
+            {
+                dynasty: "春秋", name: "老子", avatar: "🐂", title: "騎牛神祕宅男", color: "#82ccdd", likes: 0,
+                stats: { "神祕力": 100, "養生力": 95, "騎牛力": 100 },
+                gossip: "<b>🧘‍♂️ 八卦1：一出生就是老頭？</b><br>傳說他在媽媽肚子裡待了 81 年才出生，一出來頭髮白了、還長滿鬍子，所以才叫「老子」！這待機時間也太長了吧！<br><br><b>🏃‍♂️ 八卦2：寫完五千字馬上落跑！</b><br>他覺得天下大亂，騎著一頭青牛準備出國隱居。海關看他太聰明，逼他寫下一本書才能過關，他花幾天寫完《道德經》就消失得無影無蹤了！"
+            },
+            {
+                dynasty: "春秋", name: "孔子", avatar: "🏋️‍♂️", title: "史上最壯補教名師", color: "#eebb4d", likes: 0,
+                stats: { "說教力": 100, "體力": 95, "肌肉量": 99 },
+                gossip: "<b>💪 八卦1：其實是個肌肉猛男？</b><br>大家以為孔子是瘦弱的老爺爺，但他身高將近 190 公分，力氣大到能推開超重城門！難怪他講道理時，大家都乖乖聽話！<br><br><b>🎒 八卦2：古代最強背包客！</b><br>他帶學生「周遊列國」，聽起來浪漫，其實就是帶著一群學生到處露營旅行，長達 14 年的超大型戶外教學！"
+            },
+            {
+                dynasty: "春秋", name: "孫武", avatar: "📖", title: "兵法界開山鼻祖", color: "#e17055", likes: 0,
+                stats: { "戰術力": 100, "嚴格度": 100, "著書力": 95 },
+                gossip: "<b>🔪 八卦1：教女生打仗動真格！</b><br>國君故意找了一群宮女讓他訓練，宮女們一直笑不聽話，他二話不說直接把國君最愛的兩個妃子砍了！嚇得所有人秒變特種部隊！<br><br><b>🌍 八卦2：一本神書賣了兩千多年！</b><br>他寫的《孫子兵法》到現在還是全世界軍事學院、甚至企業老闆的必讀課本，版稅如果能收到現在絕對是世界首富！"
+            },
+            {
+                dynasty: "戰國", name: "墨子", avatar: "🛡️", title: "兼愛非攻科技宅", color: "#00b894", likes: 0,
+                stats: { "防守力": 100, "科技力": 100, "博愛力": 99 },
+                gossip: "<b>🛠️ 八卦1：最強硬核理科生！</b><br>他不只講大道理，還超會做物理實驗！在兩千多年前就發現了「小孔成像」的物理原理，是光學先驅！<br><br><b>🧱 八卦2：為了阻止戰爭親自守城！</b><br>聽說別國要打仗，他連夜走了十天十夜去勸架，還直接在桌上跟敵人的總工程師「玩桌遊」模擬攻城，連續破解對方九種攻法，逼得對方放棄打仗！"
+            },
+            {
+                dynasty: "戰國", name: "孟子", avatar: "🗣️", title: "史上最強護媽寶貝", color: "#f8a5c2", likes: 0,
+                stats: { "辯論力": 100, "正義感": 95, "搬家力": 0 },
+                gossip: "<b>🚚 八卦1：媽媽為了他狂搬家！</b><br>小時候太愛學別人，住墓地旁學哭喪、住菜市場學殺豬，嚇得孟母連搬三次家（孟母三遷），最後搬到學校旁邊才安心！<br><br><b>🔥 八卦2：吵架從沒輸過！</b><br>他是戰國時代的「最強名嘴」，看哪個國君不順眼就直接當面嗆爆，別人還只能乖乖聽他訓話！"
+            },
+            {
+                dynasty: "戰國", name: "莊子", avatar: "🦋", title: "超強腦洞夢想家", color: "#a18cd1", likes: 0,
+                stats: { "想像力": 100, "做夢力": 100, "辯論力": 90 },
+                gossip: "<b>💤 八卦1：到底是人還是蝴蝶？</b><br>他夢到自己變成蝴蝶，醒來後認真思考：「到底是我夢到變蝴蝶，還是蝴蝶夢到變莊子？」腦洞大開無人能敵！<br><br><b>🐟 八卦2：超愛跟好朋友鬥嘴！</b><br>他說「魚好快樂」，好朋友嗆「你又不是魚怎麼知道？」他秒回「你又不是我，怎麼知道我不知道？」邏輯鬼才！"
+            },
+            {
+                dynasty: "戰國", name: "商鞅", avatar: "🔨", title: "扛木頭變法狂人", color: "#d63031", likes: 0,
+                stats: { "變法力": 100, "嚴酷度": 100, "人緣": 0 },
+                gossip: "<b>💰 八卦1：搬一根木頭就發大財！</b><br>為了讓人民相信他的新法律，他在廣場放了一根木頭，說誰能搬到對面就給重金。大家以為是詐騙，結果真的有勇者去搬，馬上暴富！這叫「徙木立信」。<br><br><b>⚖️ 八卦2：被自己的法律害死！</b><br>他定的法律超嚴，逃犯沒有身份證連旅館都不能住。後來他自己逃亡時，老闆因為他沒帶證件拒絕他入住，最後他慘遭極刑（作繭自縛）！"
+            },
+            {
+                dynasty: "戰國", name: "蘇秦", avatar: "📌", title: "自虐型苦讀大師", color: "#ffeaa7", likes: 0,
+                stats: { "遊說力": 100, "忍痛力": 99, "官印數": 6 },
+                gossip: "<b>🩸 八卦1：想睡覺就拿針刺大腿！</b><br>早期找工作瘋狂失敗被家人看不起。為了發奮讀書，只要打瞌睡就拿錐子刺自己的大腿（錐刺股），痛到醒來繼續讀，絕對是狠人！<br><br><b>🏅 八卦2：一個人掛六家公司的總經理名牌！</b><br>苦讀成功後，靠著超強話術把六個國家聯合起來對抗秦國，一個人同時配戴六個國家的「相印」（宰相印章），人生逆襲巔峰！"
+            },
+            {
+                dynasty: "戰國", name: "扁鵲", avatar: "👁️", title: "X光眼透視神醫", color: "#81ecec", likes: 0,
+                stats: { "診斷力": 100, "透視力": 99, "逃跑力": 90 },
+                gossip: "<b>👀 八卦1：傳說有透視超能力？</b><br>據說他年輕時遇到一個神仙，給了他一種神秘的藥，吃了之後竟然能隔著牆壁看見對面的人，還能看透人體內的五臟六腑！人肉 X 光機無誤！<br><br><b>🏃 八卦2：看一眼就知道你要掛了！</b><br>他見到蔡桓公，看一眼就說「你有病」，蔡桓公不信。過了幾次扁鵲看到他就直接落跑，因為病已經深入骨髓沒救了！"
+            },
+            {
+                dynasty: "戰國", name: "屈原", avatar: "🐉", title: "端午節最佳代言人", color: "#55efc4", likes: 0,
+                stats: { "愛國力": 100, "浪漫力": 95, "游泳力": 0 },
+                gossip: "<b>🌺 八卦1：戰國第一時尚花美男！</b><br>他出門超級講究穿搭，喜歡戴超高的帽子，身上還要掛滿香草和鮮花，走在路上自帶香氣，絕對是楚國時尚指標！<br><br><b>🛶 八卦2：一個人創造了一個節日！</b><br>因為國家被滅太傷心跳了汨羅江，結果鄉民為了不讓魚吃他，瘋狂把米糰（粽子）丟進江裡，還划船去救他（賽龍舟），直接促成端午節誕生！"
+            },
+            {
+                dynasty: "戰國", name: "韓非子", avatar: "🤐", title: "結巴的霸道總裁導師", color: "#a29bfe", likes: 0,
+                stats: { "法治力": 100, "口才": 10, "寫作力": 100 },
+                gossip: "<b>🗣️ 八卦1：講話結巴卻是洗腦大師！</b><br>他天生嚴重口吃，講話超不順，但寫出來的文章卻犀利到不行！秦始皇看了他的書甚至說：「如果能見到這個人，我死而無憾！」<br><br><b>☠️ 八卦2：被同班同學坑死！</b><br>他的同班同學是秦國宰相李斯，李斯嫉妒他太聰明，竟然偷偷下毒把他毒死在監獄裡，交友不慎啊！"
+            },
+            {
+                dynasty: "戰國", name: "西施", avatar: "💖", title: "沉魚落雁顏值天花板", color: "#fab1a0", likes: 0,
+                stats: { "顏值": 100, "間諜力": 95, "心痛力": 90 },
+                gossip: "<b>🐟 八卦1：美到讓魚忘記游泳！</b><br>她在河邊洗衣服（浣紗）時，水裡的魚看到她的倒影覺得太美了，居然忘記游泳直接沉到水底，這就是「沉魚」的由來！<br><br><b>🤒 八卦2：生病皺眉頭反而更美？</b><br>她天生有心痛的毛病，常常摸著胸口皺眉頭。村裡一個醜女（東施）覺得這樣很美也跟著學，結果嚇壞所有人，這就是「東施效顰」！"
+            },
+            {
+                dynasty: "戰國", name: "荊軻", avatar: "🗡️", title: "史上最慘刺客", color: "#2d3436", likes: 0,
+                stats: { "勇氣": 100, "暗殺力": 20, "準度": 0 },
+                gossip: "<b>🗺️ 八卦1：地圖裡面藏匕首！</b><br>為了刺殺秦王，他假裝獻上地圖，當地圖慢慢展開到最後，露出了藏在裡面的毒匕首（圖窮匕見），嚇得秦王繞著柱子狂奔！<br><br><b>🎯 八卦2：其實是個大爛神射手？</b><br>他抓住了秦王袖子，結果袖子斷了。最後他把匕首當飛鏢丟向秦王，居然丟歪打中柱子！刺殺失敗被砍成肉泥。"
+            },
+
+            // --- 🧱 秦漢時期 ---
+            {
+                dynasty: "秦朝", name: "秦始皇", avatar: "🧱", title: "極限公仔收集狂", color: "#f6b93b", likes: 0,
+                stats: { "統御力": 100, "建築力": 100, "求生欲": 99 },
+                gossip: "<b>🗿 八卦1：史上最狂公仔玩家！</b><br>怕死後沒人保護，他下令打造八千多個等比例「兵馬俑」，每個長相都不一樣！根本是瘋狂限量版公仔收集狂！<br><br><b>💊 八卦2：為找仙丹被騙錢？</b><br>太想長生不老，被一個叫徐福的人騙走一堆金銀財寶和幾千人出海找仙藥，結果徐福一去不回，皇帝變冤大頭！"
+            },
+            {
+                dynasty: "秦末", name: "項羽", avatar: "💪", title: "楚國地表最強破壞王", color: "#eb2f06", likes: 0,
+                stats: { "武力": 100, "臂力": 100, "霸氣力": 95 },
+                gossip: "<b>🏋️‍♂️ 八卦1：舉起幾百公斤的青銅鼎！</b><br>力氣超級大，能一個人把重達幾百公斤的青銅大鼎舉起來，根本是古代舉重世界冠軍！<br><br><b>💥 八卦2：不給自己留退路的瘋子！</b><br>打仗時為了激發士氣，叫士兵把煮飯的鍋砸破、渡河的船鑿沉（破釜沉舟），意思是：沒退路了，打不贏就沒飯吃！結果真的嚇死敵人！"
+            },
+            {
+                dynasty: "西漢", name: "劉邦", avatar: "🎲", title: "流氓皇帝創業始祖", color: "#fd79a8", likes: 0,
+                stats: { "運氣": 100, "厚臉皮": 100, "用人力": 99 },
+                gossip: "<b>🐍 八卦1：喝醉酒砍白蛇起義！</b><br>當個小公務員押送犯人，結果犯人跑光了。他索性喝個爛醉，路上遇到一條大白蛇擋路，直接拔劍把蛇砍成兩段，從此開始造反之路！<br><br><b>🎩 八卦2：把讀書人的帽子當尿壺！</b><br>他早期非常討厭文縐縐的讀書人，有儒生來見他，他居然一把搶過人家的帽子，直接在裡面尿尿！超沒水準的流氓大老闆！"
+            },
+            {
+                dynasty: "西漢", name: "呂后", avatar: "☠️", title: "最毒婦人心代表", color: "#b33939", likes: 0,
+                stats: { "統御力": 95, "狠毒度": 100, "政治力": 90 },
+                gossip: "<b>🔪 八卦1：瞞著老公殺掉大功臣！</b><br>漢朝開國第一大將韓信，連劉邦都不敢隨便動他。呂后卻趁劉邦出差時，把韓信騙進宮裡，讓一群宮女用削尖的竹子把他戳死！<br><br><b>🐖 八卦2：發明史上最變態的刑罰！</b><br>她非常嫉妒劉邦寵愛的戚夫人，劉邦死後，她把戚夫人砍斷手腳、毒啞嗓子，扔在豬圈裡，稱之為「人彘」（人豬）！"
+            },
+            {
+                dynasty: "西漢", name: "張良", avatar: "👟", title: "幫老頭撿鞋的智者", color: "#7ed6df", likes: 0,
+                stats: { "智力": 100, "忍耐力": 95, "修仙力": 90 },
+                gossip: "<b>🥾 八卦1：被神祕老人當僕人耍！</b><br>年輕時遇到一個老頭故意把鞋踢到橋下叫他去撿，還叫他幫忙穿上！他忍住脾氣照做，結果老頭送他兵法書，從此成為頂級軍師！<br><br><b>✨ 八卦2：打完天下直接去修仙！</b><br>幫劉邦建立漢朝後，別人都在搶官做，他卻說自己要「辟穀」（不吃飯）修仙去了，成功躲過皇帝殺功臣的災難！"
+            },
+            {
+                dynasty: "西漢", name: "韓信", avatar: "👖", title: "胯下之辱忍耐王", color: "#686de0", likes: 0,
+                stats: { "統兵力": 100, "忍辱力": 100, "情商": 20 },
+                gossip: "<b>🧎‍♂️ 八卦1：從別人的褲襠鑽過去！</b><br>年輕時被街頭小混混欺負，要他從胯下鑽過去。他居然真的趴在地上鑽過去！全街笑他孬種，但他心裡卻想著天下！<br><br><b>💯 八卦2：帶兵是「多多益善」！</b><br>劉邦問他：「你覺得我能帶多少兵？」他說十萬。劉邦問：「那你呢？」他得意地說：「我嘛，越多越好（多多益善）！」讓劉邦超不爽！"
+            },
+            {
+                dynasty: "西漢", name: "霍去病", avatar: "🏇", title: "閃電戰少年戰神", color: "#f9ca24", likes: 0,
+                stats: { "騎射": 100, "速度": 100, "壽命": 20 },
+                gossip: "<b>⚡ 八卦1：18歲就封神！</b><br>別的將軍還在看地圖，他 18 歲就帶著騎兵衝進大漠，把匈奴殺得片甲不留，直接被封為「冠軍侯」（這就是冠軍這個詞的由來）！<br><br><b>🍷 八卦2：把皇帝賞的酒倒進河裡！</b><br>皇帝賞賜給他一罈美酒，他覺得不能獨享，就直接把酒倒進當地的泉水裡，讓全軍士兵一起喝，這也是甘肅「酒泉」地名的由來！"
+            },
+            {
+                dynasty: "西漢", name: "司馬遷", avatar: "📓", title: "古代最強八卦記者", color: "#a8b6bf", likes: 0,
+                stats: { "採訪力": 100, "忍耐力": 100, "紀錄力": 95 },
+                gossip: "<b>🎤 八卦1：走到哪問到哪的採訪狂人！</b><br>為了寫出最真實的歷史，他二十歲就開始在全國各地窮遊旅行，收集當地傳說和八卦，是古代的深度調查記者！<br><br><b>💪 八卦2：被處罰也要把書寫完！</b><br>因為幫別人求情得罪皇帝，受到可怕的身體處罰。但他忍辱負重花了 14 年，寫出超級偉大的歷史巨作《史記》！"
+            },
+            {
+                dynasty: "西漢", name: "王昭君", avatar: "🪕", title: "落雁美貌外交官", color: "#f8a5c2", likes: 0,
+                stats: { "顏值": 100, "外交力": 95, "彈琴力": 90 },
+                gossip: "<b>🦅 八卦1：美到大雁忘記拍翅膀！</b><br>她出塞和親時，在馬背上彈著悲傷的琵琶。天上飛過的大雁看到她的美貌，竟然忘記拍翅膀，直接從天上掉下來（落雁的由來）！<br><br><b>🎨 八卦2：不肯塞紅包給畫師的下場！</b><br>她不肯給畫師紅包，就被畫師點了一顆大醜痣。皇帝看畫以為她很醜，直到她要被送出國，皇帝看到本人才驚覺虧大了！"
+            },
+            {
+                dynasty: "東漢", name: "蔡倫", avatar: "🧻", title: "改變世界的造紙狂", color: "#c8d6e5", likes: 0,
+                stats: { "發明力": 100, "影響力": 100, "手工藝": 99 },
+                gossip: "<b>🌿 八卦1：用破布和樹皮改變世界！</b><br>以前人寫字只能刻在竹簡上。他收集了樹皮、破布、舊魚網，搗碎煮爛，發明了便宜又輕便的「蔡侯紙」，四大發明之一誕生！<br><br><b>😲 八卦2：其實是個太監？</b><br>大家以為他是個大科學家，其實他的正職是皇宮裡的主管太監！一邊服侍皇帝，一邊偷偷搞化學研發，太狂了！"
+            },
+            {
+                dynasty: "東漢", name: "張衡", avatar: "🌍", title: "地震儀首席工程師", color: "#1dd1a1", likes: 0,
+                stats: { "科技力": 100, "數學力": 95, "天文力": 100 },
+                gossip: "<b>🐸 八卦1：兩千年前發明地震儀！</b><br>他發明了「候風地動儀」，哪邊地震，龍嘴裡的球就會掉進青蛙嘴裡「叮」一聲，首都的人就知道哪裡有災情了！<br><br><b>🌟 八卦2：斜槓青年的極致！</b><br>他不只懂科學，還是個文學大師，甚至精通畫畫和數學。月球上甚至有一座環形山就是用他的名字命名的！"
+            },
+            {
+                dynasty: "東漢", name: "貂蟬", avatar: "💃", title: "連環計最強女間諜", color: "#ff9ff3", likes: 0,
+                stats: { "顏值": 100, "演技": 100, "離間力": 99 },
+                gossip: "<b>🌙 八卦1：美到月亮都躲起來！</b><br>傳說她拜月亮時，剛好一陣風吹來烏雲把月亮遮住。大家就傳說她美到連月亮都自卑躲起來了，這就是「閉月」的由來！<br><br><b>🎭 八卦2：把兩個權臣耍得團團轉！</b><br>為了拯救國家，她先假裝愛上董卓，又暗中對呂布拋媚眼，讓這對義父子為了她互相殘殺，古代最強美女特工！"
+            },
+
+            // --- ⚔️ 三國與魏晉南北朝 ---
+            {
+                dynasty: "三國", name: "曹操", avatar: "🦅", title: "三國霸道總裁", color: "#ff8b94", likes: 0,
+                stats: { "領導力": 100, "寫詩力": 90, "多疑力": 95 },
+                gossip: "<b>🏃‍♂️ 八卦1：古代最快傳說！</b><br>「說曹操，曹操就到」，因為他打仗行軍速度超級快，敵人還沒反應過來他就出現在門口了，自帶瞬間移動技能！<br><br><b>✍️ 八卦2：愛打仗也愛文藝！</b><br>雖然是軍隊大老闆，但超級愛寫詩！每次打完勝仗或看到美麗風景，就會立刻拿起筆寫詩發文，是隱藏版文藝青年。"
+            },
+            {
+                dynasty: "三國", name: "劉備", avatar: "😭", title: "愛哭的賣鞋總裁", color: "#feca57", likes: 0,
+                stats: { "仁德": 100, "哭功": 100, "編草鞋": 95 },
+                gossip: "<b>👶 八卦1：為了兄弟連兒子都摔！</b><br>趙雲千辛萬苦把他的嬰兒（阿斗）救回來，他接過來居然直接往地上摔，說：「為了這個小傢伙，差點害我損失一員大將！」嚇得趙雲死心塌地！<br><br><b>💧 八卦2：天下是哭出來的？</b><br>遇到困難就掉眼淚，遇到猛將也感動掉眼淚，連諸葛亮都是被他哭出山的。人稱「劉備的江山是哭出來的」！"
+            },
+            {
+                dynasty: "三國", name: "孫權", avatar: "🐯", title: "紫髯碧眼射虎狂人", color: "#48dbfb", likes: 0,
+                stats: { "防守力": 95, "壽命": 90, "打獵狂": 100 },
+                gossip: "<b>👽 八卦1：長相像外國人？</b><br>史書記載他「方頤大口，碧眼紫髯」，也就是有著方臉、綠色眼睛和紫色的鬍子！這長相在三國絕對是異國風情的超級大帥哥！<br><br><b>🏹 八卦2：差點被老虎吃掉的老闆！</b><br>他超級喜歡親自騎馬去射老虎。有一次老虎直接撲上他的馬鞍，差點把他咬死，即使這樣，他下次還是照樣去打獵！"
+            },
+            {
+                dynasty: "三國", name: "諸葛亮", avatar: "🗿", title: "三國頂級發明家", color: "#a8e6cf", likes: 0,
+                stats: { "智力": 100, "發明力": 95, "熬夜力": 90 },
+                gossip: "<b>🤖 八卦1：古代機器人發明家！</b><br>為了運送糧食，發明了「木牛流馬」，是一種不用吃草就會自己走的神奇獨輪車，古代版外送機器人！<br><br><b>🎭 八卦2：演技爆表的奧斯卡影帝！</b><br>城裡沒兵遇到敵人大軍，他叫人在城門口掃地，自己坐在城樓悠哉彈琴。敵人以為有埋伏嚇得跑光，這就是「空城計」！"
+            },
+            {
+                dynasty: "三國", name: "關羽", avatar: "🐉", title: "忠誠滿點紅面戰神", color: "#e55039", likes: 0,
+                stats: { "武力": 98, "忠誠力": 100, "閱讀力": 85 },
+                gossip: "<b>🍎 八卦1：天生自帶超強腮紅？</b><br>歷史上的關羽「面如重棗」，也就是臉紅得像熟透的紅棗！不管天氣多冷多熱，永遠自帶超搶眼紅色濾鏡！<br><br><b>📚 八卦2：愛看書的武打明星！</b><br>別以為他只會拿大刀打架，他其實超愛看《春秋》歷史書，連晚上睡覺前都要點燈看，文武雙全的模範生！"
+            },
+            {
+                dynasty: "三國", name: "張飛", avatar: "🗣️", title: "喝斷橋樑大嗓門", color: "#000000", likes: 0,
+                stats: { "武力": 97, "音量": 100, "畫畫力": 80 },
+                gossip: "<b>📢 八卦1：獅吼功震死敵將！</b><br>在長板橋上，他大吼一聲：「我乃燕人張翼德也！」據說聲音大到直接把旁邊夏侯傑的膽給嚇破，墜馬身亡！<br><br><b>🎨 八卦2：其實是個書法兼畫畫達人？</b><br>別以為他只是個粗魯的莽漢，歷史考證他其實寫得一手好字，還特別擅長畫美女圖，根本是個猛男藝術家！"
+            },
+            {
+                dynasty: "三國", name: "趙雲", avatar: "👶", title: "單騎救主超級保鑣", color: "#ffaaa5", likes: 0,
+                stats: { "武力": 98, "膽識": 100, "忠誠力": 99 },
+                gossip: "<b>🌪️ 八卦1：懷抱嬰兒七進七出！</b><br>為了救老闆的兒子阿斗，他一個人單槍匹馬衝進曹操幾十萬大軍裡，殺了七進七出，連曹操都忍不住下令「我要活捉他」！<br><br><b>😎 八卦2：一身都是膽！</b><br>有次敵軍壓境，他城裡沒多少兵，居然打開城門單獨站在門外。敵軍以為有埋伏嚇得撤退，劉備大讚：「子龍一身都是膽也！」"
+            },
+            {
+                dynasty: "三國", name: "呂布", avatar: "🔱", title: "專殺乾爹的戰神", color: "#c0392b", likes: 0,
+                stats: { "武力": 100, "背叛力": 100, "認父力": 99 },
+                gossip: "<b>👨‍👦 八卦1：地表最危險的乾兒子！</b><br>他戰鬥力三國第一，但他有個魔咒：認誰當乾爹，誰就會被他砍死！先殺了義父丁原，後來又殺了董卓，被張飛大罵「三姓家奴」！<br><br><b>🎯 八卦2：三國最強狙擊手？</b><br>為了阻止兩軍打仗，他叫人把畫戟插在一百五十步外，說「射中小枝就停戰」。結果他一箭精準命中，嚇呆所有人！"
+            },
+            {
+                dynasty: "三國", name: "周瑜", avatar: "🎵", title: "顧曲周郎音樂總監", color: "#ff6b6b", likes: 0,
+                stats: { "統兵力": 98, "顏值": 95, "絕對音感": 100 },
+                gossip: "<b>🎸 八卦1：三國最強絕對音感！</b><br>他精通音樂，就算喝醉，只要樂隊彈錯一個音，他馬上就會轉頭看過去。當時的迷妹為了讓他多看一眼，還故意把琴彈錯！<br><br><b>😡 八卦2：其實根本沒被氣死！</b><br>小說寫他心胸狹窄被諸葛亮氣死，其實歷史上他度量超級大，是個完美的帥哥將軍，是被小說家黑得最慘的受害者！"
+            },
+            {
+                dynasty: "三國", name: "華佗", avatar: "🩺", title: "古代最強外科神醫", color: "#55efc4", likes: 0,
+                stats: { "醫術": 100, "健身力": 90, "麻醉力": 100 },
+                gossip: "<b>💊 八卦1：發明古代版麻醉藥！</b><br>他發明了「麻沸散」，讓病人喝下去後呼呼大睡，然後直接幫他們開刀做手術！在沒有現代醫學的古代簡直是魔法！<br><br><b>🐻 八卦2：帶大家跳動物體操！</b><br>他發明了「五禽戲」，模仿老虎、鹿、熊、猴子、鳥的動作來做體操，據說他的徒弟每天跳，活到九十幾歲牙齒都沒掉！"
+            },
+            {
+                dynasty: "三國", name: "司馬懿", avatar: "🐢", title: "最強忍者活到最後", color: "#222f3e", likes: 0,
+                stats: { "隱忍力": 100, "壽命": 99, "演技": 100 },
+                gossip: "<b>👗 八卦1：穿女裝也無所謂！</b><br>諸葛亮故意送了一套女人的衣服給他，笑他像個女人。結果他不但不生氣，還穿上女裝開開心心地問使者：「我穿這好看嗎？」<br><br><b>🛌 八卦2：裝病騙過所有人！</b><br>晚年為了奪權，故意裝中風，連喝粥都流得滿身都是。等政敵一放鬆警戒，他立刻跳起來發動政變，奪走整個天下！"
+            },
+            {
+                dynasty: "西晉", name: "潘安", avatar: "🍎", title: "擲果盈車國民校草", color: "#ffcccc", likes: 0,
+                stats: { "顏值": 100, "文學力": 90, "人氣": 100 },
+                gossip: "<b>🛒 八卦1：出門一趟就能開水果店！</b><br>他是中國第一大帥哥！只要他坐車出門，路上的大媽少女都會瘋狂把蘋果、橘子丟進他的車裡，回家車子都裝滿了（擲果盈車）！<br><br><b>👴 八卦2：長得醜的朋友超可憐！</b><br>他有個長得超醜的朋友叫左思，想學潘安出門兜風。結果路上的老太太不僅不丟水果，還集體朝他吐口水！"
+            },
+            {
+                dynasty: "東晉", name: "王羲之", avatar: "🖌️", title: "東晉書法男神", color: "#dcedc1", likes: 0,
+                stats: { "書法力": 100, "愛鵝力": 95, "練字力": 90 },
+                gossip: "<b>🦢 八卦1：超級瘋狂的鵝控！</b><br>他覺得觀察鵝脖子轉動能幫助寫字。有次為了一群漂亮白鵝，甚至親自幫道士抄寫一整部經書來交換！<br><br><b>🖤 八卦2：把水池洗成黑色的男人！</b><br>從小練字超認真，每次寫完就在家門口的水池洗毛筆。洗著洗著，最後竟然把整個大水池的水都染成黑色！"
+            },
+            {
+                dynasty: "東晉", name: "陶淵明", avatar: "🌻", title: "佛系田園 YouTuber", color: "#ffd3b6", likes: 0,
+                stats: { "佛系力": 100, "種田力": 30, "寫作力": 95 },
+                gossip: "<b>👔 八卦1：不想穿西裝見老闆！</b><br>原本是公務員，長官來視察規定要穿官服迎接。他覺得太煩，說「不為五斗米折腰」，直接辭職回家種田！<br><br><b>🌱 八卦2：其實是個種田地雷？</b><br>雖然愛寫田園詩，但超不會種田！他自己寫的詩裡都承認雜草長得超級茂盛，豆苗卻只有一點點，根本是植物殺手！"
+            },
+            {
+                dynasty: "南北朝", name: "花木蘭", avatar: "🏹", title: "古代最強 Cosplayer", color: "#fad390", likes: 0,
+                stats: { "偽裝力": 100, "孝順力": 100, "戰鬥力": 90 },
+                gossip: "<b>🎭 八卦1：神級女扮男裝！</b><br>為了不讓年老爸爸去當兵，假扮成男生混進軍隊！跟一群大男生一起生活打仗十幾年，完全沒被識破，化妝偽裝技術神級！<br><br><b>🛍️ 八卦2：當兵前先去瘋狂購物！</b><br>決定代父從軍後，跑遍整個城市東西南北，買馬、買馬鞍、買鞭子，根本是出發前的大型 Shopping 行程！"
+            },
+            {
+                dynasty: "南北朝", name: "蘭陵王", avatar: "🎭", title: "美到要戴面具的戰神", color: "#8c7ae6", likes: 0,
+                stats: { "武力": 95, "顏值": 99, "悲劇度": 90 },
+                gossip: "<b>👺 八卦1：因為長太帥只好戴面具！</b><br>他打仗超猛，但長得實在太清秀。為了在戰場上嚇唬敵人，他每次打仗都必須戴著猙獰恐怖的面具，堪稱古代版超級英雄！<br><br><b>🍷 八卦2：太完美反而被毒死！</b><br>因為他長得帥、人品好、打仗又無敵，深受人民愛戴。結果皇帝表弟嫉妒他功高震主，送了一杯毒酒賜死他。"
+            },
+            {
+                dynasty: "南北朝", name: "祖沖之", avatar: "🔢", title: "圓周率計算狂魔", color: "#4cd137", likes: 0,
+                stats: { "數學力": 100, "算盤力": 100, "發明力": 90 },
+                gossip: "<b>⭕ 八卦1：領先全世界一千年！</b><br>在沒有計算機的古代，他用無數根小木棍（算籌），把圓周率精準算到了小數點後第七位！紀錄保持了一千多年才被歐洲打破！<br><br><b>🚤 八卦2：發明了古代的快艇！</b><br>他不只算數學，還發明了一種叫「千里船」的快艇，據說一天可以跑一百多里，完全是古代的黑科技工程師！"
+            },
+
+            // --- 🏮 隋唐時期 ---
+            {
+                dynasty: "隋朝", name: "楊堅", avatar: "😨", title: "開國怕老婆皇帝", color: "#e84118", likes: 0,
+                stats: { "治國力": 95, "懼內度": 100, "專情力": 99 },
+                gossip: "<b>💍 八卦1：古代超前部署的一夫一妻制！</b><br>老婆獨孤皇后超強勢，逼他發誓這輩子只能有她一個女人。作為堂堂皇帝，他真的做到了，是極少數沒有龐大後宮的皇帝！<br><br><b>🐎 八卦2：被老婆氣到離家出走！</b><br>有次他偷偷寵幸宮女，皇后直接把宮女殺了。皇帝氣到騎馬衝出皇宮跑到山裡哭喊：「我堂堂天子居然沒有自由！」"
+            },
+            {
+                dynasty: "隋朝", name: "楊廣", avatar: "🛶", title: "狂建運河的敗家子", color: "#c23616", likes: 0,
+                stats: { "基建力": 100, "敗家力": 100, "奢侈度": 100 },
+                gossip: "<b>🌸 八卦1：為了一朵花挖了一條大河？</b><br>傳說他為了一看揚州的「瓊花」，下令動用幾百萬人挖出了超長的大運河！雖然運河對經濟有幫助，但當時把國家都搞破產了！<br><br><b>🔥 八卦2：連樹都要穿絲綢！</b><br>為了跟外國使節炫富，他下令冬天把長安城裡的樹木全部綁上高級絲綢！外國人問：「你們還有人沒衣服穿，為什麼給樹穿？」"
+            },
+            {
+                dynasty: "唐朝", name: "魏徵", avatar: "🛑", title: "皇帝最怕的糾察隊", color: "#7f8fa6", likes: 0,
+                stats: { "直言力": 100, "膽量": 100, "讓皇帝生氣力": 99 },
+                gossip: "<b>🤬 八卦1：天天罵皇帝當飯吃！</b><br>他是宰相，每天的工作就是指著皇帝鼻子罵！唐太宗氣到大喊：「我總有一天要殺了這個鄉巴佬！」結果隔天還是乖乖聽話。<br><br><b>🐉 八卦2：夢裡還能斬龍王？</b><br>在神話《西遊記》裡，他兼職天庭的劊子手。皇帝在陪他下棋，他居然在打瞌睡時，靈魂出竅去天上把龍王給砍了頭！"
+            },
+            {
+                dynasty: "唐朝", name: "房玄齡", avatar: "🏺", title: "「吃醋」詞語發明者", color: "#dcdde1", likes: 0,
+                stats: { "謀略力": 95, "怕老婆": 100, "醋酸度": 100 },
+                gossip: "<b>🍷 八卦1：老婆連毒藥都敢喝！</b><br>皇帝看他太怕老婆，故意賜給他美女。皇帝端出一杯「毒酒」（其實是醋）說：「不接受美女就喝死吧！」老婆二話不說一口乾了！從此「吃醋」成了嫉妒的代名詞！<br><br><b>🧠 八卦2：最強大腦組合！</b><br>他和杜如晦合稱「房謀杜斷」，房玄齡想一百個點子，杜如晦挑出最好的一個去執行，是最強總經理搭檔！"
+            },
+            {
+                dynasty: "唐朝", name: "薛仁貴", avatar: "🏹", title: "三箭定天山白衣戰神", color: "#ffeaa7", likes: 0,
+                stats: { "射箭力": 100, "武力": 98, "食量": 99 },
+                gossip: "<b>🎯 八卦1：射了三箭敵人直接投降！</b><br>打仗時面對幾十萬大軍和幾個超級猛將，他連續射出三支神箭，秒殺對方三個主將！嚇得敵軍全體投降（三箭定天山）！<br><br><b>👕 八卦2：一定要穿白色衣服！</b><br>剛當兵時為了讓皇帝注意到他，在一片黑漆漆的軍隊裡，他故意穿著超顯眼的全套白衣服衝鋒陷陣，果然一眼被老闆相中！"
+            },
+            {
+                dynasty: "唐朝", name: "武則天", avatar: "👑", title: "史上最強女霸總", color: "#ffaaa5", likes: 0,
+                stats: { "統御力": 100, "霸氣力": 100, "升級力": 100 },
+                gossip: "<b>📈 八卦1：地表最強升級王！</b><br>一開始只是皇宮裡地位很低的才人，靠著超強聰明才智，一路破關斬將，最後成為中國歷史上「唯一」正統的女皇帝！<br><br><b>🪨 八卦2：超神祕的無字碑！</b><br>別的皇帝死後墓碑寫滿自己多厲害，她死前卻要求立「無字碑」。意思是：我的一生太傳奇，好壞留給後人去討論吧！"
+            },
+            {
+                dynasty: "唐朝", name: "玄奘", avatar: "🎒", title: "最強硬核背包客", color: "#f39c12", likes: 0,
+                stats: { "徒步力": 100, "外語力": 100, "取經力": 99 },
+                gossip: "<b>🐒 八卦1：真的有孫悟空嗎？</b><br>他就是《西遊記》唐三藏的原型！歷史上他沒有孫悟空保護，是一個人偷偷溜出國，徒步穿越大沙漠去印度留學，簡直是極限生存大師！<br><br><b>🗣️ 八卦2：印度最強留學生！</b><br>他在印度不但沒被欺負，還學會了超多種語言，參加一場超大型辯論會，連續十八天沒有人能辯贏他，紅遍全印度！"
+            },
+            {
+                dynasty: "唐朝", name: "李白", avatar: "⚔️", title: "被寫詩耽誤的武打明星", color: "#8fd3f4", likes: 0,
+                stats: { "戰鬥力": 95, "自信力": 100, "劍術": 90 },
+                gossip: "<b>🥋 八卦1：其實是個武林高手？</b><br>15 歲就開始練劍，夢想當行俠仗義的老大！據說劍術在唐朝名列前茅，根本是被寫詩耽誤的劍客！<br><br><b>😎 八卦2：超狂員工耍大牌！</b><br>喝醉被皇帝叫去寫詩，居然耍大牌，要求皇帝身邊最紅的太監幫他脫鞋！這麼狂的員工最後就被 fire 了！"
+            },
+            {
+                dynasty: "唐朝", name: "杜甫", avatar: "😭", title: "詩仙的超級鐵粉", color: "#95a5a6", likes: 0,
+                stats: { "憂愁力": 100, "追星力": 99, "寫實力": 100 },
+                gossip: "<b>🤩 八卦1：李白的最狂粉絲！</b><br>他超級崇拜李白，遇到李白後簡直變成小跟班，寫了十幾首詩給李白，連作夢都夢到李白，但李白好像只回過他兩三首詩。<br><br><b>🏠 八卦2：茅草屋被風吹跑！</b><br>他人生超悲慘，好不容易蓋了一間茅草屋，結果秋天大風把屋頂茅草吹走，還被小孩搶走茅草，氣得他寫下千古名詩！"
+            },
+            {
+                dynasty: "唐朝", name: "王維", avatar: "🏞️", title: "詩中有畫的佛系大師", color: "#badc58", likes: 0,
+                stats: { "寫詩力": 95, "畫畫力": 95, "佛系力": 100 },
+                gossip: "<b>🖼️ 八卦1：一邊寫詩一邊畫畫！</b><br>蘇軾評價他「詩中有畫，畫中有詩」。讀他的詩就像在看超高畫質風景紀錄片，畫出來的畫又充滿意境，是古代雙棲藝術家！<br><br><b>💊 八卦2：被叛軍抓走只好裝病！</b><br>安史之亂被叛軍抓走逼他當官。他為了不幫壞人工作，居然偷偷吃藥讓自己長滿水泡拉肚子裝病，收復後才洗白自己！"
+            },
+            {
+                dynasty: "唐朝", name: "白居易", avatar: "👵", title: "詩界市調狂人", color: "#f6d365", likes: 0,
+                stats: { "戰鬥力": 40, "智力": 95, "親民力": 100 },
+                gossip: "<b>📊 八卦1：老奶奶聽得懂才過關！</b><br>每次寫完詩，都會唸給不識字的老奶奶聽。老奶奶聽不懂他就修改，根本是古代市場調查大師！<br><br><b>👶 八卦2：從小就是神童！</b><br>七個月大還不會說話，家人指著「之」、「無」兩個字，他竟然就記住了！大腦內建超級記憶卡！"
+            },
+            {
+                dynasty: "唐朝", name: "柳宗元", avatar: "🏔️", title: "千山鳥飛絕孤獨星人", color: "#ffeaa7", likes: 0,
+                stats: { "寫作力": 95, "孤獨感": 100, "旅行力": 90 },
+                gossip: "<b>🎣 八卦1：史上最孤獨的釣魚客！</b><br>被貶官心情超差，寫下「千山鳥飛絕...獨釣寒江雪」。全世界彷彿只剩他一個人在下雪的江邊釣魚，孤獨等級 MAX！<br><br><b>🐸 八卦2：愛寫動物寓言諷刺老闆！</b><br>因為不能直接罵朝廷，他寫了一堆動物小故事（如自以為是的驢子、貪心的蟲子）來暗酸爛官員，是古代高級酸民！"
+            },
+            {
+                dynasty: "唐朝", name: "楊玉環", avatar: "🍒", title: "荔枝狂熱愛好者", color: "#ffcccc", likes: 0,
+                stats: { "顏值": 100, "舞蹈力": 95, "吃貨力": 100 },
+                gossip: "<b>🐎 八卦1：古代的生鮮極速宅配！</b><br>超級愛吃南方荔枝，皇帝為了討她歡心，動用國家軍隊的快馬接力跑了幾千公里，只為了讓她吃到最新鮮的荔枝！<br><br><b>🌸 八卦2：美到花都害羞？</b><br>傳說她摸了一下含羞草，葉子馬上捲起來了。宮女們就到處宣傳貴妃美到連花看了都自卑低下了頭，這就是「羞花」的由來！"
+            },
+            {
+                dynasty: "唐朝", name: "杜秋娘", avatar: "💃", title: "唐朝頂流女偶像", color: "#a18cd1", likes: 0,
+                stats: { "戰鬥力": 30, "歌唱力": 95, "偶像力": 100 },
+                gossip: "<b>🎤 八卦1：神曲天后！</b><br>聽過「勸君莫惜金縷衣」嗎？她因為這首歌瞬間爆紅，被皇帝看上接進皇宮，就像素人突然登上小巨蛋！<br><br><b>👶 八卦2：跌破眼鏡的轉職？</b><br>皇帝過世後，她居然轉職成了「小皇子的專屬保母」！人生簡直像雲霄飛車，比八點檔還刺激！"
+            },
+
+            // --- 🍵 宋朝與元朝 ---
+            {
+                dynasty: "北宋", name: "趙匡胤", avatar: "🏏", title: "杯酒釋兵權魔術師", color: "#f1c40f", likes: 0,
+                stats: { "武術力": 95, "腹黑度": 90, "統御力": 95 },
+                gossip: "<b>🧥 八卦1：睡一覺醒來變皇帝？</b><br>帶兵出差喝醉睡覺，士兵居然把黃色龍袍披在他身上，全軍下跪喊萬歲！他「勉為其難」答應當皇帝，這叫「黃袍加身」！<br><br><b>🍻 八卦2：請喝頓酒就沒收軍權！</b><br>怕手下將軍造反，請大家喝酒。酒喝到一半說自己睡不著，將軍們嚇得隔天馬上交出兵權乖乖退休，一滴血都沒流解決危機！"
+            },
+            {
+                dynasty: "北宋", name: "包拯", avatar: "🌙", title: "額頭帶月亮的神探", color: "#2f3542", likes: 0,
+                stats: { "斷案力": 100, "公正度": 100, "膚色黑": 90 },
+                gossip: "<b>🌑 八卦1：其實他沒那麼黑？</b><br>戲曲裡總把他畫得像炭一樣黑。但歷史上的包青天其實是個膚色正常的白面書生！會被畫黑是因為民間覺得黑色代表鐵面無私！<br><br><b>😤 八卦2：噴口水噴皇帝一臉！</b><br>他當官超級敢講話，有次進諫時講得太激動，口水直接噴到皇帝臉上！皇帝不但沒生氣，還默默擦掉繼續聽他罵人！"
+            },
+            {
+                dynasty: "北宋", name: "王安石", avatar: "🛀", title: "不愛洗澡的變法相公", color: "#c8d6e5", likes: 0,
+                stats: { "變法力": 95, "固執度": 100, "衛生": 10 },
+                gossip: "<b>🤢 八卦1：髒到連臉都是黑的！</b><br>他是超級工作狂，幾個月都不洗澡。有次大家以為他生病臉色發黑，結果醫生看了說：「這不是生病，是臉上的污垢太厚了！」<br><br><b>🐂 八卦2：史上最固執的「拗相公」！</b><br>推行新法遭到全天下反對，但他脾氣超級硬！誰都勸不聽，連蘇軾都被他趕出京城！"
+            },
+            {
+                dynasty: "北宋", name: "司馬光", avatar: "🥤", title: "砸水缸的急智童星", color: "#8395a7", likes: 0,
+                stats: { "編書力": 100, "機智度": 90, "反對力": 95 },
+                gossip: "<b>🏺 八卦1：小時候就是救人小英雄！</b><br>七歲時小孩掉進大水缸快淹死。他直接搬起一塊大石頭把水缸砸破，水流出來救了朋友一命，瞬間爆紅！<br><br><b>📚 八卦2：花了19年寫厚史書！</b><br>因為反對王安石變法被邊緣化，他索性躲起來花了 19 年，寫出超級巨著《資治通鑑》！寫完沒多久就過勞死了！"
+            },
+            {
+                dynasty: "北宋", name: "蘇軾", avatar: "🍖", title: "百萬吃播主", color: "#fbc2eb", likes: 0,
+                stats: { "戰鬥力": 50, "樂觀力": 100, "吃貨力": 100 },
+                gossip: "<b>👨‍🍳 八卦1：被處罰還能發明美食？</b><br>超級吃貨！被貶官趕到黃州，因為當地豬肉便宜，居然研發出超好吃的「東坡肉」！別人在哭他在研究食譜！<br><br><b>🛁 八卦2：洗澡洗到寫成一首詩？</b><br>去公共澡堂請人幫忙搓背，覺得太舒服居然馬上寫了一首詩！走到哪寫到哪的打卡狂人！"
+            },
+            {
+                dynasty: "南宋", name: "李清照", avatar: "🎲", title: "嗆辣遊戲王", color: "#84fab0", likes: 0,
+                stats: { "戰鬥力": 80, "吐槽力": 90, "遊戲力": 100 },
+                gossip: "<b>🛶 八卦1：不小心把船開進泥巴裡！</b><br>私底下超級豪邁！有次和朋友玩太嗨，去划船不小心迷路，把船開進滿是荷花的泥巴裡出不來！<br><br><b>🎮 八卦2：古代的電競高手？</b><br>超愛玩桌遊「打馬」逢賭必贏！甚至寫了《打馬圖經》（遊戲攻略本），發文吐槽知名男詩人！"
+            },
+            {
+                dynasty: "南宋", name: "岳飛", avatar: "🦅", title: "滿腔熱血硬漢戰神", color: "#c0392b", likes: 0,
+                stats: { "戰鬥力": 100, "忠誠力": 100, "被坑力": 99 },
+                gossip: "<b>🖋️ 八卦1：背上自帶人體刺青？</b><br>傳說他媽媽為了提醒他熱愛國家，居然在他背上刺了「盡忠報國」四個大字！洗澡時看到絕對會立刻熱血沸騰！<br><br><b>😡 八卦2：被超扯理由定罪！</b><br>他在前線打勝仗，奸臣秦檜卻騙他回來，最後用「莫須有」（或許有吧）這種超瞎的理由把他處死，讓後人氣到現在！"
+            },
+            {
+                dynasty: "南宋", name: "朱熹", avatar: "👨‍🏫", title: "超強辯論王", color: "#ff9a9e", likes: 0,
+                stats: { "戰鬥力": 70, "辯論力": 100, "嚴格度": 95 },
+                gossip: "<b>🔥 八卦1：史上最強辯論大會？</b><br>曾在「鵝湖」舉辦三天三夜辯論大會，兩邊互相講道理開大絕，吵到連旁邊聽的人都覺得超精彩！<br><br><b>👮‍♂️ 八卦2：古代版錯字警察！</b><br>對讀書超級龜毛，規定看書要有固定姿勢，還愛挑別人語病，根本是古代版的「校規糾察隊」！"
+            },
+            {
+                dynasty: "南宋", name: "陸游", avatar: "🐈", title: "愛國也愛貓的貓奴", color: "#d1ccc0", likes: 0,
+                stats: { "愛國力": 100, "寫詩力": 99, "吸貓力": 100 },
+                gossip: "<b>😻 八卦1：古代最強瘋狂貓奴！</b><br>外面打著仗，他在家瘋狂吸貓！他寫了超級多首讚美貓咪的詩，甚至為了請一隻貓回家，還準備了「聘禮」，把貓當主子伺候！<br><br><b>🛌 八卦2：死前最後一句話還在想打仗！</b><br>臨死前寫給兒子的遺言詩說：「等國家軍隊收復中原那一天，祭拜祖先時千萬別忘了告訴我！」"
+            },
+            {
+                dynasty: "南宋", name: "辛棄疾", avatar: "⚔️", title: "拿大刀的瘋狂詞人", color: "#34495e", likes: 0,
+                stats: { "武力": 100, "寫詞力": 95, "膽量": 100 },
+                gossip: "<b>🐎 八卦1：帶著五十人衝進五萬人敵營！</b><br>他年輕時為了抓叛徒，帶著五十幾個小弟，直接衝進有五萬大軍的敵營把人綁走，簡直是動作片男主角！<br><br><b>🍷 八卦2：喝醉酒連松樹都罵！</b><br>他有次喝醉酒覺得旁邊的松樹在扶他，他竟然大喊「去你的！」然後把松樹推開，根本是個超級戰鬥狂兼酒鬼！"
+            },
+            {
+                dynasty: "元朝", name: "成吉思汗", avatar: "🦅", title: "征服半個地球的男人", color: "#b33939", likes: 0,
+                stats: { "征服力": 100, "統御力": 100, "騎兵力": 100 },
+                gossip: "<b>🌍 八卦1：地盤大到難以想像！</b><br>從一個孤兒，一路打到建立歷史上版圖最大的帝國之一！從亞洲一路打到歐洲，歐洲人看到他的騎兵簡直像看到外星人入侵！<br><br><b>🪦 八卦2：連墓地在哪都沒人知道！</b><br>他死前下令實行「密葬」。傳說下葬後讓上萬匹馬把墓地踩平種樹。到現在全世界考古學家都找不到他葬在哪！"
+            },
+            {
+                dynasty: "元朝", name: "關漢卿", avatar: "🥓", title: "蒸不爛的銅豌豆", color: "#34495e", likes: 0,
+                stats: { "編劇力": 100, "叛逆度": 100, "抗壓性": 99 },
+                gossip: "<b>❄️ 八卦1：寫出讓天馬上下雪的劇本！</b><br>他寫了《竇娥冤》。女主角發誓死後會「六月飛雪」，結果老天爺真的在夏天降下大雪！這故事紅到現在大家都還在講！<br><br><b>🤘 八卦2：自稱是一顆煮不爛的豌豆！</b><br>面對壓迫，他寫曲子嗆聲說：「我是個蒸不爛、煮不熟、炒不爆、響噹噹的一粒銅豌豆！」超級搖滾精神的大師！"
+            },
+
+            // --- 🚢 明清時期 ---
+            {
+                dynasty: "明朝", name: "朱元璋", avatar: "🥣", title: "開局一個碗逆襲王", color: "#d35400", likes: 0,
+                stats: { "逆襲力": 100, "殺氣": 99, "工作狂": 100 },
+                gossip: "<b>乞丐 八卦1：從乞丐變皇帝！</b><br>他是歷史上起點最低的皇帝！小時候窮到當和尚，還拿著破碗到處當乞丐要飯，最後居然打敗所有人當上皇帝，超級勵志！<br><br><b>😠 八卦2：史上最恐怖慣老闆！</b><br>他當皇帝後超級多疑，覺得手下會背叛他，發明了各種可怕處罰，把當初陪他打天下的老朋友幾乎全砍光了！"
+            },
+            {
+                dynasty: "明朝", name: "朱棣", avatar: "🗺️", title: "派人下西洋的霸氣老闆", color: "#e67e22", likes: 0,
+                stats: { "野心力": 100, "打仗力": 95, "找姪子": 99 },
+                gossip: "<b>叔叔 八卦1：搶了姪子的皇位！</b><br>本來皇帝是他姪子，他覺得不服氣，直接帶兵從北京打到南京把皇位搶過來。姪子在一場大火中失蹤，成為千古謎團！<br><br><b>🚢 八卦2：派鄭和下西洋其實是找人？</b><br>歷史學家懷疑，他派鄭和帶大船出國，其實有一部分原因是要到處搜查失蹤的姪子（建文帝）有沒有逃到海外！"
+            },
+            {
+                dynasty: "明朝", name: "鄭和", avatar: "🚢", title: "古代最強航海王", color: "#2980b9", likes: 0,
+                stats: { "航海力": 100, "外交力": 95, "送禮力": 90 },
+                gossip: "<b>🦒 八卦1：帶了「神獸」回中國？</b><br>他開著當時全世界最大的船隊去航海，從非洲帶回了一隻叫「祖剌法」的動物，大家以為是神獸「麒麟」，其實是長頸鹿啦！<br><br><b>⚓ 八卦2：船大到可以在上面踢足球！</b><br>他的「寶船」超級巨大，長度超過一百公尺，上面不僅可以種菜養豬，甚至寬敞到可以在甲板上踢球，古代的豪華郵輪！"
+            },
+            {
+                dynasty: "明朝", name: "王陽明", avatar: "🧘", title: "龍場悟道全能神人", color: "#16a085", likes: 0,
+                stats: { "哲學力": 100, "打仗力": 100, "覺醒力": 100 },
+                gossip: "<b>💡 八卦1：坐在石洞裡突然變神仙？</b><br>被太監陷害貶到貴州山洞裡，在極端惡劣的環境下，半夜突然頓悟了「知行合一」的哲理，從此打通任督二脈開創「心學」！<br><br><b>⚔️ 八卦2：靠幾封假信就平定叛亂！</b><br>寧王帶十萬大軍造反。他當時手上沒兵，竟然捏造幾封假公文，假裝朝廷有幾十萬大軍埋伏，直接把寧王嚇得不敢動，輕鬆活捉叛賊！"
+            },
+            {
+                dynasty: "明朝", name: "唐伯虎", avatar: "🎨", title: "被電影耽誤的才子", color: "#8e44ad", likes: 0,
+                stats: { "畫工": 100, "悲慘度": 95, "點秋香力": 0 },
+                gossip: "<b>🎬 八卦1：其實根本沒有點秋香！</b><br>電影裡說他有八個老婆還點了秋香，但歷史上他其實超窮超慘，老婆還跑了！「唐伯虎點秋香」完全是幾百年後的作者瞎編的！<br><br><b>😭 八卦2：考試作弊被抓（被牽拖的）？</b><br>他本來是全國考試第一名的學霸，結果進京趕考時朋友作弊，害他也被當成共犯抓去關，從此不能當官，只能賣畫維生。"
+            },
+            {
+                dynasty: "明朝", name: "李時珍", avatar: "🌿", title: "極限野外求生大師", color: "#27ae60", likes: 0,
+                stats: { "醫藥力": 100, "吃草力": 95, "登山力": 90 },
+                gossip: "<b>🐍 八卦1：為了寫書什麼都敢吃！</b><br>為了解中藥的藥性，他親自跑到深山裡「神農嘗百草」，甚至連毒蛇、奇怪蟲子都要親自研究，根本古代版野外求生！<br><br><b>📚 八卦2：花了三十年只寫一本書！</b><br>他翻山越嶺走了幾萬里路，花了快三十年，終於寫出超厚超猛的《本草綱目》，被外國人稱為「東方醫學巨典」！"
+            },
+            {
+                dynasty: "明朝", name: "鄭成功", avatar: "⚔️", title: "國姓爺海戰王者", color: "#2980b9", likes: 0,
+                stats: { "海戰力": 100, "忠誠力": 100, "混血度": 50 },
+                gossip: "<b>🇯🇵 八卦1：其實是中日混血兒！</b><br>他的爸爸是超級大海盜鄭芝龍，媽媽則是日本人田川氏！他出生在日本平戶，七歲才回到中國，自帶東亞雙重國籍背景！<br><br><b>🇳🇱 八卦2：打跑荷蘭人的超級英雄！</b><br>清朝大軍把南明逼到絕路時，他轉向台灣，帶著大艦隊在海上擊敗了當時的荷蘭東印度公司，收復台灣！"
+            },
+            {
+                dynasty: "清朝", name: "康熙", avatar: "🦠", title: "天花免疫千古一帝", color: "#f39c12", likes: 0,
+                stats: { "統御力": 100, "學習力": 95, "免疫力": 100 },
+                gossip: "<b>🤕 八卦1：因為生病才當上皇帝？</b><br>他小時候得過超級可怕的傳染病「天花」且活了下來，臉上還留了小麻子。因為他已經終身免疫，他爸爸才放心把皇位傳給他！<br><br><b>📐 八卦2：其實是個理科幾何大師！</b><br>除了學四書五經，他超級愛學西方的數學、天文和地理。甚至會親自拿幾何儀器在宮裡畫圖算數學！"
+            },
+            {
+                dynasty: "清朝", name: "乾隆", avatar: "👑", title: "瘋狂蓋章彈幕狂魔", color: "#f368e0", likes: 0,
+                stats: { "蓋章力": 100, "寫詩力": 10, "自信力": 100 },
+                gossip: "<b>🔴 八卦1：毀滅古董的蓋章機器！</b><br>他超級愛看古人字畫，看完就算了，還喜歡在上面狂蓋自己的印章！有名的畫被他蓋得像起水泡一樣，被後人罵翻！<br><br><b>📝 八卦2：寫了四萬首詩的湊數王！</b><br>他一生寫了超過四萬首詩，數量比整個唐朝詩人加起來還多！但因為寫太快了，很多詩像白開水一樣無聊！"
+            },
+            {
+                dynasty: "清朝", name: "紀曉嵐", avatar: "🚬", title: "抽菸抽到出名的才子", color: "#34495e", likes: 0,
+                stats: { "編書力": 100, "抽菸力": 100, "吃肉力": 99 },
+                gossip: "<b>🔥 八卦1：煙斗大到可以裝半斤菸絲！</b><br>他是一個超級大菸槍（人稱紀大煙袋）。有次皇帝突然找他，他趕緊把還在燒的煙斗塞進靴子裡，結果腳被燙出大水泡！<br><br><b>🥩 八卦2：不吃飯只吃豬肉！</b><br>據史書記載，他每餐完全不吃米飯等澱粉，而是直接狂啃十盤豬肉！活到八十多歲每天還是這樣吃，生酮飲食先驅？"
+            },
+            {
+                dynasty: "清朝", name: "慈禧", avatar: "💅", title: "挪用軍費蓋花園太后", color: "#8e44ad", likes: 0,
+                stats: { "掌權力": 100, "奢侈度": 100, "背鍋力": 90 },
+                gossip: "<b>🍎 八卦1：一年吃掉十五萬顆蘋果？</b><br>她對氣味非常敏感，每年要在房間裡擺放幾萬顆新鮮水果來當天然擴香瓶！水果乾了就全扔掉換新的！<br><br><b>🚢 八卦2：拿買軍艦的錢去蓋花園！</b><br>清末要發展海軍，結果她為了慶祝六十大壽，居然把北洋水師軍費挪用去修建「頤和園」，導致後來甲午戰爭打輸！"
+            },
+
+            // --- 🕰️ 近代 ---
+            {
+                dynasty: "近代", name: "魯迅", avatar: "🚬", title: "棄醫從文毒舌王者", color: "#7f8c8d", likes: 0,
+                stats: { "吐槽力": 100, "寫作力": 100, "戰鬥力": 95 },
+                gossip: "<b>🩺 八卦1：不想當醫生了！</b><br>他本來在日本學醫，但看到一部影片裡中國人被欺負卻還在旁邊圍觀，他覺得「醫治身體不如醫治思想」，改拿筆寫文章罵醒大家！<br><br><b>🔥 八卦2：文章裡的吵架王！</b><br>他非常會用文字「酸」別人，看誰不順眼就寫文章吐槽，而且罵人不帶髒字，對手都被他氣得半死又無法反駁！"
+            },
+            {
+                dynasty: "近代", name: "胡適", avatar: "📖", title: "白話文推廣大使", color: "#d2b4de", likes: 0,
+                stats: { "白話力": 100, "改革力": 95, "愛妻力": 90 },
+                gossip: "<b>🗣️ 八卦1：古代文言文終結者！</b><br>以前人寫文章用難懂的文言文，他大力推廣「嘴巴怎麼說話，手就怎麼寫字」，如果沒他我們現在還在背文言文！<br><br><b>🦁 八卦2：其實超級怕老婆？</b><br>在外面是有名的大學者；回到家卻對老婆百依百順，還發明「怕老婆俱樂部」，超級反差萌！"
+            },
+            {
+                dynasty: "近代", name: "徐志摩", avatar: "👓", title: "民國超強暈船仔", color: "#b8e994", likes: 0,
+                stats: { "寫詩力": 95, "浪漫力": 100, "暈船力": 99 },
+                gossip: "<b>💌 八卦1：最會寫情書的男人！</b><br>只要喜歡上別人就會瘋狂寫詩寫情書，自帶粉紅泡泡的「暈船大師」！〈再別康橋〉就是他留學寫的打卡文。<br><br><b>✈️ 八卦2：為聽演講連命都不要？</b><br>為了趕去聽欣賞的才女（林徽因）演講，搭上免費的送信小飛機，不幸遇到大霧墜機，結束戲劇性一生。"
+            },
+            {
+                dynasty: "近代", name: "林徽因", avatar: "🏛️", title: "人間四月天國民女神", color: "#ffb8b8", likes: 0,
+                stats: { "建築力": 100, "才華": 99, "萬人迷": 100 },
+                gossip: "<b>✨ 八卦1：把三個頂級才子迷得團團轉！</b><br>詩人徐志摩為她瘋狂；建築大師梁思成跟她結婚；哲學家金岳霖為了她終身不娶，甘願住在她家旁邊當一輩子好朋友！<br><br><b>🧱 八卦2：爬上屋頂測量的硬核建築師！</b><br>別以為她只是嬌滴滴寫詩的女神，她和老公為了尋找古建築，親自跑到荒郊野外爬上快塌掉的寺廟屋頂做測量！"
+            },
+            {
+                dynasty: "近代", name: "張愛玲", avatar: "👗", title: "旗袍控毒舌女作家", color: "#6c5ce7", likes: 0,
+                stats: { "寫作力": 100, "毒舌度": 99, "時尚度": 95 },
+                gossip: "<b>👠 八卦1：用被單自己做衣服的奇女子！</b><br>超級愛美且特立獨行！她會去買英國奇特布料，甚至拿祖母的舊被面自己設計出超誇張的旗袍穿上街，回頭率百分之百！<br><br><b>💬 八卦2：金句製造機！</b><br>「出名要趁早呀！來得太晚的話，快樂也不那麼痛快。」她的文章看透人性，充滿諷刺卻又優雅，是民國時期最潮的文壇女王！"
+            },
+// --- 🌟 全朝代制霸擴充包 (正常網紅區) ---
+            {
+                dynasty: "上古", name: "大禹", avatar: "🌊", title: "過勞死治水狂魔", color: "#3498db", likes: 0,
+                stats: { "治水力": 100, "過勞度": 100, "顧家力": 0 },
+                gossip: "<b>🚪 八卦1：三過家門而不入！</b><br>他是史上最強工作狂！為了治水，他在外面瘋狂加班了十三年。傳說他三次路過自己家門口，連聽到自己剛出生的兒子在哭，他都忍住不進去抱一下，簡直是不要命的勞模！<br><br><b>🐻 八卦2：其實會變身成大熊？</b><br>傳說他治水時為了劈開大山，會偷偷施展法術變成一隻力大無窮的大黑熊！有次不小心被老婆看到，老婆嚇得拔腿就跑！"
+            },
+            {
+                dynasty: "戰國", name: "藺相如", avatar: "💎", title: "完美護草使者", color: "#1abc9c", likes: 0,
+                stats: { "口才": 100, "膽量": 100, "護玉力": 100 },
+                gossip: "<b>🏃‍♂️ 八卦1：抱著國寶撞柱子！</b><br>秦王想騙走趙國的超級國寶「和氏璧」。他拿著玉石對著秦王大吼：「你敢搶，我就把我的頭跟玉一起撞碎在柱子上！」嚇得秦王乖乖退後，最後他還施展魔術般的手法，把玉石偷偷運回國（完璧歸趙）！<br><br><b>🤝 八卦2：用愛感化討厭他的將軍！</b><br>將軍廉頗本來超討厭他，但他為了國家團結，每次在路上遇到廉頗就叫司機繞路躲開。廉頗知道真相後超級慚愧，竟然脫光上衣綁著荊棘去向他道歉（負荊請罪）！"
+            },
+            {
+                dynasty: "西漢", name: "東方朔", avatar: "🃏", title: "漢朝最強脫口秀演員", color: "#f39c12", likes: 0,
+                stats: { "搞笑力": 100, "厚臉皮": 99, "食量": 95 },
+                gossip: "<b>🍖 八卦1：吃完飯還打包帶走！</b><br>他是漢武帝身邊的超級開心果。每次皇帝請吃飯，他吃飽後，還會直接把剩下的肉塞進衣服的袖子裡打包帶回家，把衣服弄得油油的，連皇帝都拿他沒轍！<br><br><b>📜 八卦2：用三千片竹簡寫履歷！</b><br>他剛去應徵工作時，寫了一份超級長的自傳履歷，用了足足三千片竹簡！皇帝派了兩個人幫忙抬，看了整整兩個月才看完，結果因為他太幽默了，馬上被錄取！"
+            },
+            {
+                dynasty: "東晉", name: "謝安", avatar: "♟️", title: "最愛裝鎮定的宰相", color: "#9b59b6", likes: 0,
+                stats: { "淡定力": 100, "軍事力": 95, "裝逼度": 100 },
+                gossip: "<b>😎 八卦1：國家快滅了還在下棋！</b><br>前秦派了八十萬大軍打過來（淝水之戰），首都快嚇死了。他身為總指揮，居然悠哉地在別墅裡跟朋友下棋！等前線打勝仗的信送來，他看了一眼隨手丟旁邊繼續下棋，裝作毫不關心。<br><br><b>👞 八卦2：裝過頭把木屐都踩斷了！</b><br>雖然表面上裝得很淡定，但等朋友一下完棋離開，他高興得在房間裡狂跳，過門檻時甚至把木屐（木鞋）底下的牙齒都給踩斷了，自己都沒發現！"
+            },
+            {
+                dynasty: "唐朝", name: "程咬金", avatar: "🪓", title: "三板斧超級福將", color: "#e67e22", likes: 0,
+                stats: { "運氣": 100, "武力": 90, "招式數量": 3 },
+                gossip: "<b>😂 八卦1：打架永遠只會三招！</b><br>傳說中他在夢裡跟神仙學武功，結果學到一半被叫醒，只記住了三招斧頭的招式（劈腦袋、掏耳朵、剔牙齒）。但他靠這超狂的三招「三板斧」，居然打遍天下無敵手，成為唐朝開國功臣！<br><br><b>🍀 八卦2：運氣好到擋不住！</b><br>他絕對是古代的幸運星。別人打仗九死一生，他打仗不但沒事，還能順便撿到寶物或立大功，活到了七十幾歲，在古代武將中是超級人瑞！"
+            },
+            {
+                dynasty: "北宋", name: "范仲淹", avatar: "😟", title: "天下第一憂愁大師", color: "#34495e", likes: 0,
+                stats: { "憂國力": 100, "文學力": 95, "改革力": 90 },
+                gossip: "<b>😭 八卦1：永遠都在煩惱的男人！</b><br>他寫了一句千古名言：「先天下之憂而憂，後天下之樂而樂。」意思是：天下的壞事我先煩惱，天下的好事等大家都享受完了我再享受！根本是古代最偉大的操心大師！<br><br><b>🥣 八卦2：把粥切成塊來吃！</b><br>他小時候窮到沒錢吃飯。他每天煮一鍋稀飯，等稀飯冷掉結成塊狀後，用刀子切成四塊，早晚各吃兩塊（劃粥割齏），靠著這股毅力最後考上進士當了大官！"
+            },
+            {
+                dynasty: "北宋", name: "歐陽脩", avatar: "📝", title: "找錯字大魔王", color: "#16a085", likes: 0,
+                stats: { "寫作力": 100, "當考官": 100, "提拔力": 100 },
+                gossip: "<b>🔥 八卦1：把考生的爛文章貼在牆上笑！</b><br>他是北宋最嚴格的國文老師！以前流行寫很難懂的火星文，他當考官時，只要看到寫火星文的考卷一律給零分，甚至會把爛文章貼在牆上當作負面教材！<br><br><b>👀 八卦2：蘇軾的超級星探！</b><br>有次改考卷看到一篇超級棒的文章，他以為是自己的徒弟（曾鞏）寫的，為了避嫌故意給了第二名。結果放榜發現，那篇文章竟然是天才蘇軾寫的！他直接大喊：「這小子以後一定會比我紅！」"
+            },
+            {
+                dynasty: "明朝", name: "戚繼光", avatar: "🥯", title: "怕老婆的抗倭英雄", color: "#c0392b", likes: 0,
+                stats: { "打海盜": 100, "怕老婆": 100, "發明力": 90 },
+                gossip: "<b>🥯 八卦1：發明了古代的貝果！</b><br>為了打擊海盜（倭寇），他發明了一種中間有洞的硬餅乾，用繩子串起來掛在士兵脖子上，餓了隨時能吃。這種乾糧後來被叫做「光餅」，堪稱古代版的行軍貝果！<br><br><b>🦁 八卦2：帶軍隊去嚇老婆反而被嚇跪！</b><br>他在外面是威風凜凜的大將軍，但在家超級怕老婆！有次部下看不下去，叫他帶全副武裝的軍隊回家給老婆下馬威。結果老婆一開門大吼：「帶這麼多人想幹嘛！」他嚇得腿軟說：「報...報告夫人，請您來閱兵！」"
+            },
+            {
+                dynasty: "清朝", name: "鄭板橋", avatar: "🐶", title: "狗肉愛好怪咖畫家", color: "#27ae60", likes: 0,
+                stats: { "畫竹子": 100, "裝傻力": 100, "吃狗肉": 99 },
+                gossip: "<b>🤪 八卦1：難得糊塗的裝傻大師！</b><br>他最有名的一幅字寫著「難得糊塗」，意思是太聰明活得太累，偶爾裝傻反而比較快樂！他當縣長時遇到旱災，直接不理上級規定，開倉放糧救活了一萬多人！<br><br><b>🍖 八卦2：用狗肉就可以騙到他的畫！</b><br>他畫的竹子超級值錢，但他脾氣很怪，有錢人不一定買得到。但他超級愛吃狗肉，有個人故意在他家門口烤狗肉，他聞到香味就跑出來吃，吃高興了就直接送人家一幅畫！"
+            },
+            {
+                dynasty: "清朝", name: "劉銘傳", avatar: "🚂", title: "台灣鐵路之父", color: "#f1c40f", likes: 0,
+                stats: { "建鐵路": 100, "防守力": 95, "現代化": 100 },
+                gossip: "<b>🛤️ 八卦1：在台灣蓋了中國第一條載客鐵路！</b><br>他當台灣巡撫時超級前衛！在台北到基隆之間蓋了鐵路，還買了火車頭（騰雲號），讓台灣比大陸很多省份還要早現代化，根本是基建狂魔！<br><br><b>💡 八卦2：點亮台灣第一盞電燈！</b><br>他不只蓋鐵路，還在台北裝了電燈、架了電報線，甚至開辦了新式學堂。如果沒有他，台灣的現代化可能要晚好幾十年呢！"
+            }
+        ];
+
+// ==========================================
+        // 😈 歷史黑料區 (終極核彈擴充：100位古人黑歷史)
+        // ==========================================
+        const darkPeople = [
+            // --- 老師點名 & 經典渣男區 ---
+            { dynasty: "唐朝", name: "杜秋娘", avatar: "🗡️", title: "宮廷大亂鬥黑手", color: "#833471", likes: 0, stats: { "野心度": 100, "宮鬥力": 95, "跌落神壇": 100 }, gossip: "<b>👑 黑料1：想當造王者卻翻車！</b><br>原本是保母，卻暗中策劃宮廷政變想把小皇子推上皇位自己當老闆！<br><br><b>📉 黑料2：從頂流跌回平民！</b><br>政變敗露，直接被剝奪財產趕出皇宮，晚年又窮又慘，貪心惹的禍！" },
+            { dynasty: "南宋", name: "朱熹", avatar: "👺", title: "古代最強雙標教官", color: "#eb4d4b", likes: 0, stats: { "雙標力": 100, "嘴硬度": 99, "報復心": 100 }, gossip: "<b>👿 黑料1：嘴上說道德，私下超黑心！</b><br>天天教人壓抑慾望，結果被爆料私下愛跑娛樂場所，還對媳婦毛手毛腳！<br><br><b>⛓️ 黑料2：嚴刑拷打無辜女生！</b><br>為打倒政敵，故意把無辜女歌手關在監獄嚴刑拷打幾個月逼供！" },
+            { dynasty: "近代", name: "徐志摩", avatar: "💔", title: "民國第一渣男", color: "#e056fd", likes: 0, stats: { "渣男度": 100, "寫詩力": 95, "變心速度": 100 }, gossip: "<b>🗑️ 黑料1：老婆懷孕還逼人離婚！</b><br>為追林徽因，逼「懷孕」的老婆離婚墮胎！老婆不答應他直接落跑！<br><br><b>💍 黑料2：搶好朋友的老婆！</b><br>後來又看上好友的老婆陸小曼，偷偷在一起逼朋友離婚，連老師都在婚禮上大罵他！" },
+            { dynasty: "唐朝", name: "元稹", avatar: "🤥", title: "海王始祖情話騙子", color: "#686de0", likes: 0, stats: { "甜言蜜語": 100, "薄情度": 99, "寫小說": 95 }, gossip: "<b>📝 黑料1：寫小說毀掉初戀！</b><br>為考狀元拋棄初戀，還寫小說把女方寫成壞女人替自己找藉口！<br><br><b>🥀 黑料2：裝專情的偽君子！</b><br>寫詩裝作只愛死去的妻子，結果老婆剛死立刻交新女友，不久又拋棄人家！" },
+            { dynasty: "唐朝", name: "李紳", avatar: "🍗", title: "浪費糧食的偽君子", color: "#f0932b", likes: 0, stats: { "浪費力": 100, "殘暴度": 90, "寫詩力": 80 }, gossip: "<b>🍚 黑料1：寫「粒粒皆辛苦」，吃飯卻超浪費！</b><br>當大官後生活超級奢侈，特別愛吃「雞舌頭」，一頓飯要殺幾百隻雞！<br><br><b>😠 黑料2：當官後欺負老百姓！</b><br>動不動嚴刑拷打下屬，百姓怕到逃跑，連皇帝都氣得把他從族譜除名！" },
+            { dynasty: "西漢", name: "匡衡", avatar: "💰", title: "鑿壁偷光的貪汙犯", color: "#535c68", likes: 0, stats: { "貪財力": 100, "偷光力": 80, "虛偽度": 95 }, gossip: "<b>🗺️ 黑料：利用地圖偷國家的地！</b><br>小時候「鑿壁偷光」超勵志，當宰相後，竟利用地圖畫錯的漏洞，偷把國家四萬多畝土地劃進自己名下！最後被拔官變回平民！" },
+            { dynasty: "南宋", name: "陸游", avatar: "🍼", title: "千古第一媽寶男", color: "#c8d6e5", likes: 0, stats: { "媽寶度": 100, "寫詩力": 99, "後悔力": 100 }, gossip: "<b>👩‍👦 黑料：聽媽媽的話拋棄最愛！</b><br>媽媽不喜歡媳婦逼他離婚，他居然乖乖把超愛的老婆休了！後來遇到前妻又寫悲傷的詩惹人家哭，前妻回去不久就病死了！" },
+            { dynasty: "西漢", name: "司馬相如", avatar: "🎸", title: "吃軟飯的祖師爺", color: "#ff9f43", likes: 0, stats: { "彈琴撩妹": 100, "吃軟飯": 100, "變心力": 90 }, gossip: "<b>💸 黑料：裝浪漫其實是看上妳的錢！</b><br>彈琴拐跑富家千金，逼岳父給一大筆錢。晚年有錢當官了，居然還想拋棄糟糠之妻去娶年輕小妾！" },
+            { dynasty: "唐朝", name: "白居易", avatar: "👴", title: "雙標老渣男", color: "#8395a7", likes: 0, stats: { "雙標力": 100, "養小妾": 100, "逼死人": 90 }, gossip: "<b>💀 黑料：一首詩逼死好朋友的老婆！</b><br>好友死後老婆守寡十年，他竟寫詩嘲諷：「妳這麼愛他怎麼不跟著去死？」逼得人家自殺！自己晚年卻瘋狂養年輕小妾！" },
+
+            // --- 🗡️ 背刺與狠毒區 ---
+            { dynasty: "北宋", name: "沈括", avatar: "🔪", title: "背刺好朋友的抓耙子", color: "#222f3e", likes: 0, stats: { "科學力": 100, "背刺力": 100, "心機": 95 }, gossip: "<b>📝 黑料：把朋友的抱怨當成把柄告密！</b><br>蘇軾把他當好朋友，他卻偷偷把蘇軾寫的詩抄下來扭曲意思向皇帝告狀，差點害蘇軾被砍頭！" },
+            { dynasty: "唐朝", name: "宋之問", avatar: "🩸", title: "殺外甥搶版權的惡魔", color: "#b33939", likes: 0, stats: { "抄襲力": 100, "狠毒度": 100, "拍馬屁": 99 }, gossip: "<b>🎒 黑料：為了偷一句詩活活壓死親戚！</b><br>外甥寫了一句超美的詩，他不給版權，宋之問竟然叫下人用裝滿土的袋子把親外甥活活壓死！" },
+            { dynasty: "唐朝", name: "吳道子", avatar: "🖌️", title: "買兇殺人的畫聖", color: "#2c3e50", likes: 0, stats: { "畫工": 100, "嫉妒心": 100, "犯罪力": 90 }, gossip: "<b>👿 黑料：見不得別人比我好！</b><br>看到年輕畫家畫得比他還好，怕地位被搶，居然花錢雇殺手在半路把那個年輕天才給暗殺了！" },
+            { dynasty: "秦朝", name: "李斯", avatar: "☠️", title: "毒死同學的心機男", color: "#8e44ad", likes: 0, stats: { "法術力": 90, "嫉妒心": 100, "陷害力": 99 }, gossip: "<b>🧪 黑料：怕同學搶工作直接下毒！</b><br>和韓非子是同學。怕太聰明的韓非子搶走宰相位置，竟然偷偷在監獄裡把韓非子毒死！" },
+            { dynasty: "春秋", name: "勾踐", avatar: "🌉", title: "過河拆橋大師", color: "#d35400", likes: 0, stats: { "忍辱力": 100, "無情度": 100, "殺功臣": 99 }, gossip: "<b>⚔️ 黑料：幫我打天下？打完就殺你！</b><br>復國成功後馬上翻臉，逼死了一路幫他出謀劃策的最大功臣，嚇得其他功臣連夜跑路！" },
+
+            // --- 👑 帝王將相翻車區 ---
+            { dynasty: "西漢", name: "劉邦", avatar: "👞", title: "踹小孩下車的渣爹", color: "#c0392b", likes: 0, stats: { "逃跑力": 100, "狠心度": 100, "厚臉皮": 100 }, gossip: "<b>🏃‍♂️ 黑料：嫌車太重跑不快，不要小孩了！</b><br>被追殺時嫌馬車載小孩太重跑不快，竟然用腳把親生小孩踹下馬車！來回踹了好幾次！" },
+            { dynasty: "三國", name: "劉備", avatar: "🏃", title: "老婆如衣服的落跑王", color: "#f39c12", likes: 0, stats: { "哭功": 100, "拋妻棄子": 95, "洗腦力": 90 }, gossip: "<b>💨 黑料：一有危險就自己先溜！</b><br>每次打敗仗逃跑絕對不帶老婆小孩！名言是：「兄弟如手足，妻子如衣服。」衣服破了換一件就好！" },
+            { dynasty: "三國", name: "曹操", avatar: "🔪", title: "多疑的殺人狂", color: "#c82a2a", likes: 0, stats: { "多疑力": 100, "錯殺力": 100, "霸道度": 99 }, gossip: "<b>🩸 黑料：寧可我殺錯，不可放過！</b><br>逃亡借住朋友家，聽到磨刀聲以為要殺他，衝出去把人家全家殺光！發現殺錯不但沒道歉還說自己絕不認錯！" },
+            { dynasty: "三國", name: "關羽", avatar: "🙄", title: "傲慢白目大叔", color: "#16a085", likes: 0, stats: { "武力": 99, "傲慢度": 100, "外交力": 0 }, gossip: "<b>🗣️ 黑料：講話太白目惹禍上身！</b><br>孫權想跟他結為親家，他當著使者的面大罵：「老虎的女兒怎麼可能嫁給狗的兒子！」氣炸孫權最後派兵把他砍了！" },
+            { dynasty: "三國", name: "張飛", avatar: "👊", title: "虐待員工被反殺的老闆", color: "#000000", likes: 0, stats: { "武力": 97, "脾氣": 100, "愛喝酒": 100 }, gossip: "<b>😠 黑料：喝醉酒就拿鞭子抽下屬！</b><br>每次喝醉酒就把部下綁在樹上狂抽。最後部下受不了這個慣老闆，趁他喝醉睡覺時把他的頭給砍了！" },
+            { dynasty: "三國", name: "諸葛亮", avatar: "💸", title: "掏空國家的戰爭狂", color: "#27ae60", likes: 0, stats: { "智力": 100, "窮兵黷武": 95, "掏空國庫": 90 }, gossip: "<b>⚔️ 黑料：打仗打到國家破產！</b><br>堅持連年攻打魏國，把蜀國的年輕人都抓去當兵，國庫燒光光。導致他死後蜀國弱到不行馬上被滅！" },
+            { dynasty: "三國", name: "孫權", avatar: "🤪", title: "晚年瘋癲的暴君", color: "#2980b9", likes: 0, stats: { "壽命": 90, "瘋癲度": 100, "殺小孩": 95 }, gossip: "<b>☠️ 黑料：老番顛逼死親生兒子！</b><br>老了得被害妄想症！故意讓兩個兒子互相鬥爭，最後把兒子逼到自殺，還把一堆勸架的老臣全殺了！" },
+            { dynasty: "三國", name: "司馬懿", avatar: "🤞", title: "發假誓的超級影帝", color: "#2c3e50", likes: 0, stats: { "演技": 100, "無恥度": 100, "違約力": 100 }, gossip: "<b>🤥 黑料：對著河神發誓當放屁！</b><br>發毒誓保證對手投降絕不殺害，結果對手一放下武器，他馬上翻臉把人家全家殺光，破壞古人發誓的信用！" },
+            { dynasty: "明朝", name: "鄭成功", avatar: "😡", title: "暴躁老爸", color: "#d35400", likes: 0, stats: { "脾氣": 100, "大義滅親": 99, "高血壓": 90 }, gossip: "<b>🔪 黑料：氣到下令砍了接班人！</b><br>聽說兒子私生活不檢點覺得太丟臉，氣到直接下令要把老婆、兒子和孫子全部處死！還好手下抗命沒照做！" },
+            { dynasty: "明朝", name: "朱元璋", avatar: "🩸", title: "屠殺好朋友的恐怖魔王", color: "#b33939", likes: 0, stats: { "殺氣": 100, "殘暴度": 100, "多疑症": 100 }, gossip: "<b>💀 黑料：幫我打天下的，全部得死！</b><br>當皇帝後怕兄弟搶兒子的皇位，找各種超瞎理由把幾萬個功臣和家人全部砍頭剝皮！" },
+
+            // --- 🙃 荒謬行徑與昏君區 ---
+            { dynasty: "東漢", name: "蔡倫", avatar: "🧻", title: "發明紙的惡毒太監", color: "#34495e", likes: 0, stats: { "發明力": 100, "宮鬥力": 95, "陷害力": 90 }, gossip: "<b>👿 黑料：幫著壞皇后逼死別人！</b><br>其實是個心狠手辣的太監！幫著皇后陷害別的妃子，甚至參與逼死皇帝的奶奶，靠宮鬥手段升官的！" },
+            { dynasty: "北宋", name: "司馬光", avatar: "🤪", title: "固執到瘋狂的老頑固", color: "#7f8fa6", likes: 0, stats: { "編書力": 100, "固執度": 100, "賣老婆": 80 }, gossip: "<b>🚫 黑料：只要是你說的，我全都反對！</b><br>反對王安石走火入魔。當上宰相後第一件事就是把新法全部廢除！連對國家有好處的規定也閉著眼睛廢掉！" },
+            { dynasty: "北宋", name: "宋徽宗", avatar: "🎨", title: "治國白痴藝術家", color: "#9b59b6", likes: 0, stats: { "藝術力": 100, "治國力": 0, "亡國度": 100 }, gossip: "<b>💸 黑料：為了買石頭把國家搞亡！</b><br>為在花園擺放漂亮的石頭，居然把百姓的房子拆了來運石頭。金國打來嚇得丟下皇位，最後被抓去當奴隸！" },
+            { dynasty: "清朝", name: "乾隆", avatar: "✍️", title: "文字獄殺人狂", color: "#eb2f06", likes: 0, stats: { "寫詩力": 10, "殺文人": 100, "自戀度": 100 }, gossip: "<b>🗡️ 黑料：寫錯一個字就全家砍頭！</b><br>超級玻璃心。只要詩裡有讓他覺得在暗諷他的字，就把作家全家老小抓去砍頭！清朝最黑暗的文字獄！" },
+            { dynasty: "清朝", name: "慈禧", avatar: "💅", title: "亡國級敗家老奶奶", color: "#e056fd", likes: 0, stats: { "貪權力": 100, "賣國度": 100, "奢侈力": 100 }, gossip: "<b>🚢 黑料：海軍沒錢買砲彈？我先蓋花園！</b><br>日本快打過來了，她居然把買軍艦的錢拿去修超豪華頤和園過六十大壽，導致甲午戰爭打輸！" },
+
+            // --- 😈 瘋狂擴充 50 人開始 ---
+            { dynasty: "秦朝", name: "胡亥", avatar: "🐷", title: "三年敗光帝國的笨蛋", color: "#ff7979", likes: 0, stats: { "敗家力": 100, "聽話度": 100, "智商": 10 }, gossip: "<b>🗑️ 黑料：把兄弟姊妹全殺光！</b><br>聽太監的話篡位當皇帝，怕兄弟姊妹搶皇位，把二三十個兄弟姊妹全部殘忍殺害，最後自己也被太監逼死！" },
+            { dynasty: "秦朝", name: "趙高", avatar: "🦌", title: "指鹿為馬的變態太監", color: "#badc58", likes: 0, stats: { "指鹿為馬": 100, "奸臣力": 100, "洗腦力": 99 }, gossip: "<b>🐴 黑料：強迫大家把鹿叫成馬！</b><br>牽了一隻鹿上朝說這是馬，誰敢說實話是鹿，下班後就被他暗殺！整個國家的官員都被他搞得不敢說真話！" },
+            { dynasty: "西漢", name: "劉徹", avatar: "🧙", title: "迷信逼死兒子的老爸", color: "#f0932b", likes: 0, stats: { "武功": 90, "迷信度": 100, "殺兒子": 100 }, gossip: "<b>💀 黑料：聽信神棍逼死太子！</b><br>漢武帝晚年超迷信，以為有人用巫術詛咒他。聽信奸臣的話，竟然逼得自己最優秀的親生太子走投無路自殺！" },
+            { dynasty: "西漢", name: "王莽", avatar: "👽", title: "假道學的穿越失敗者", color: "#c7ecee", likes: 0, stats: { "演戲力": 100, "穿越感": 90, "做秀力": 100 }, gossip: "<b>🎭 黑料：殺自己兒子作秀！</b><br>為了裝作自己是個大公無私的聖人，竟然逼迫自己犯錯的兒子自殺給全天下看，最後搶了漢朝的皇位被推翻！" },
+            { dynasty: "東漢", name: "董卓", avatar: "🍔", title: "胖到能點天燈的魔王", color: "#eb4d4b", likes: 0, stats: { "體重": 100, "殘暴度": 100, "油量": 100 }, gossip: "<b>🔥 黑料：死後被做成人體蠟燭！</b><br>殘暴不仁把首都燒成廢墟。因為太胖了，被呂布殺死後，士兵在他肚子上插了一根燈芯，點火燒了幾天幾夜才燒完！" },
+            { dynasty: "三國", name: "袁紹", avatar: "🤷", title: "重度選擇困難症", color: "#f6e58d", likes: 0, stats: { "家世": 100, "猶豫度": 100, "打敗仗": 99 }, gossip: "<b>⏳ 黑料：想太多把好牌打爛！</b><br>手下給了他三個超棒的戰術，他猶豫不決不知道選哪個。最後因為小兒子生病心情不好，決定不出兵，把天下送給了曹操！" },
+            { dynasty: "三國", name: "劉禪", avatar: "🎮", title: "樂不思蜀的無心公子", color: "#ffbe76", likes: 0, stats: { "投降力": 100, "沒心沒肺": 100, "裝傻力": 95 }, gossip: "<b>😂 黑料：國家滅了還覺得很開心！</b><br>投降後被抓到敵國，人家問他想不想念故鄉蜀國？他笑著說：「這裡太好玩了，我一點都不想家（樂不思蜀）！」氣死一票老臣！" },
+            { dynasty: "三國", name: "馬謖", avatar: "⌨️", title: "古代鍵盤戰神", color: "#686de0", likes: 0, stats: { "嘴砲力": 100, "實戰力": 0, "違規度": 100 }, gossip: "<b>⛰️ 黑料：不聽勸告把軍隊帶到山頂！</b><br>平常兵法講得頭頭是道，真上戰場時不聽副將勸告，硬要把軍隊帶到沒水的山頂上紮營。結果被敵軍包圍斷水，害蜀國大敗被斬首！" },
+            { dynasty: "三國", name: "曹丕", avatar: "📝", title: "逼迫弟弟的霸凌王", color: "#c8d6e5", likes: 0, stats: { "心機": 90, "欺負弟弟": 100, "心胸狹窄": 100 }, gossip: "<b>🚶‍♂️ 黑料：七步寫不出詩就砍頭！</b><br>嫉妒弟弟曹植的才華，當上皇帝後逼弟弟在走七步的時間內寫出一首詩，寫不出來就要處死！幸好弟弟寫了「本是同根生，相煎何太急」才逃過一劫。" },
+            { dynasty: "三國", name: "楊修", avatar: "🙊", title: "愛劇透被砍頭的聰明人", color: "#535c68", likes: 0, stats: { "智商": 95, "白目度": 100, "劇透力": 100 }, gossip: "<b>🍗 黑料：看透老闆心思到處講！</b><br>曹操給了個暗號「雞肋」，他馬上叫大家收拾行李準備撤退，還到處宣傳說老闆想跑了。曹操覺得他太愛炫耀聰明，直接找藉口把他砍了！" },
+            { dynasty: "三國", name: "司馬昭", avatar: "📣", title: "秘密全天下都知道", color: "#130f40", likes: 0, stats: { "野心": 100, "保密力": 0, "弒君度": 100 }, gossip: "<b>🔪 黑料：當街殺死皇帝！</b><br>想篡位的心思太明顯，連皇帝都說「司馬昭之心，路人皆知」。最後他手下竟然在大街上直接把魏國皇帝給刺死了，吃相超級難看！" },
+            { dynasty: "晉朝", name: "王衍", avatar: "🗣️", title: "只會講幹話的宰相", color: "#dff9fb", likes: 0, stats: { "清談力": 100, "實幹力": 0, "甩鍋力": 100 }, gossip: "<b>🗑️ 黑料：國家滅亡怪別人！</b><br>當宰相每天只會跟別人討論哲學（清談）不處理政事。最後敵軍打過來把他抓了，他還怪別人，敵軍氣到說：「國家就是被你講幹話講到亡的！」直接把他活埋！" },
+            { dynasty: "唐朝", name: "李世民", avatar: "📖", title: "偷改歷史的傲嬌皇帝", color: "#ffb142", likes: 0, stats: { "治國力": 100, "改史書": 100, "殺兄弟": 95 }, gossip: "<b>📝 黑料：自己當維基百科管理員！</b><br>發動玄武門之變把哥哥弟弟都殺了。因為太怕被後人罵，他竟然強迫史官把歷史書拿給他看，自己瘋狂修改美化自己，是歷史上第一個偷看偷改史書的皇帝！" },
+            { dynasty: "唐朝", name: "高力士", avatar: "🥾", title: "超會記仇的脫鞋太監", color: "#706fd3", likes: 0, stats: { "權勢": 95, "記仇力": 100, "打小報告": 100 }, gossip: "<b>👿 黑料：你讓我脫鞋，我讓你沒工作！</b><br>李白喝醉叫他脫鞋，他覺得受辱。後來皇帝想提拔李白，他就在楊貴妃面前瘋狂說李白壞話，最後成功把李白從皇宮裡趕出去！" },
+            { dynasty: "唐朝", name: "安祿山", avatar: "🍼", title: "假裝嬰兒的三百斤巨漢", color: "#ff5252", likes: 0, stats: { "體重": 100, "裝可愛": 100, "造反力": 100 }, gossip: "<b>🤢 黑料：三百斤胖子認貴妃當媽！</b><br>為了討好皇帝，這個重達三百多斤的胖老頭，竟然認比自己年輕的楊貴妃當乾媽！還穿上嬰兒衣服讓宮女用轎子抬著他玩，超級辣眼睛，最後發動叛亂毀了唐朝！" },
+            { dynasty: "唐朝", name: "楊國忠", avatar: "🤑", title: "靠妹妹上位的草包", color: "#34ace0", likes: 0, stats: { "裙帶關係": 100, "無能度": 100, "拉仇恨": 99 }, gossip: "<b>🤦‍♂️ 黑料：什麼都不會只會收紅包！</b><br>本來是個只會賭博的混混，因為堂妹楊貴妃得寵，一路被提拔當上宰相！每天只會貪汙，把國家搞得烏煙瘴氣，最後被憤怒的士兵亂刀砍死！" },
+            { dynasty: "唐朝", name: "李隆基", avatar: "🥁", title: "晚年大昏君", color: "#ffda79", likes: 0, stats: { "音樂力": 100, "好色度": 100, "甩鍋力": 100 }, gossip: "<b>💔 黑料：把老婆推出去送死！</b><br>年輕時是超強好老闆，晚年沉迷楊貴妃不管國家。叛亂發生逃跑時，士兵逼他交出楊貴妃，他為了保命居然眼睜睜看著最愛的女人被勒死！" },
+            { dynasty: "唐朝", name: "韓愈", avatar: "💊", title: "吃火藥中毒的文學家", color: "#33d9b2", likes: 0, stats: { "文學力": 100, "反迷信": 0, "作死力": 95 }, gossip: "<b>💥 黑料：勸人不信邪，自己狂吃毒藥！</b><br>寫文章勸皇帝不要迷信佛骨，結果自己晚年為了長生不老，竟然瘋狂吃含有「硫磺」（做火藥的原料）的仙丹，最後中毒把自己給毒死了！" },
+            { dynasty: "唐朝", name: "賀知章", avatar: "🏊", title: "喝醉掉井裡的糊塗老頭", color: "#218c74", likes: 0, stats: { "寫詩力": 90, "酒量": 100, "搞笑力": 95 }, gossip: "<b>🍺 黑料：喝醉掉進井裡還在水底睡覺！</b><br>他是李白的好酒友，超級愛喝酒。有次喝太醉騎馬，竟然連人帶馬掉進一口乾枯的水井裡，大家急忙去救他，發現他竟然在井底打呼睡著了！" },
+            { dynasty: "唐朝", name: "魚玄機", avatar: "🗡️", title: "打死女僕的瘋狂道姑", color: "#b33939", likes: 0, stats: { "寫詩力": 90, "嫉妒心": 100, "殺人犯": 100 }, gossip: "<b>🩸 黑料：懷疑僕人跟男友有一腿直接打死！</b><br>是個有名的女詩人兼道姑，因為懷疑自己的女僕跟自己的情郎私通，竟然一怒之下把女僕活活打死，最後被判處死刑砍頭！" },
+            { dynasty: "北宋", name: "趙光義", avatar: "🪓", title: "斧聲燭影的可疑弟弟", color: "#ffb8b8", likes: 0, stats: { "可疑度": 100, "篡位力": 90, "逃跑力": 100 }, gossip: "<b>🕵️ 黑料：哥哥死得不明不白！</b><br>和哥哥（皇帝趙匡胤）半夜喝酒，外面的人看到窗戶映出他拿斧頭的影子，隔天哥哥就突然暴斃，他馬上自己當皇帝，成為千古懸案！打仗時還丟下軍隊坐驢車逃跑！" },
+            { dynasty: "北宋", name: "寇準", avatar: "🎯", title: "逼老闆上戰場的瘋狂宰相", color: "#c56cf0", likes: 0, stats: { "強硬度": 100, "膽量": 100, "綁架老闆": 95 }, gossip: "<b>😤 黑料：不准逃！給我去打仗！</b><br>遼國打過來，皇帝嚇得想逃跑。他身為宰相，居然半威脅半綁架地逼著皇帝御駕親征，還不准皇帝後退一步，最後成功嚇退敵軍！" },
+            { dynasty: "南宋", name: "秦檜", avatar: "🤥", title: "莫須有假新聞發明家", color: "#3dc1d3", likes: 0, stats: { "賣國度": 100, "誣陷力": 100, "遺臭萬年": 100 }, gossip: "<b>🤮 黑料：用三個字殺死大英雄！</b><br>為了討好敵國，以「莫須有」（或許有造反吧）這種超瞎的理由處死岳飛。到現在他的雕像還跪在岳飛廟前面被大家吐口水！" },
+            { dynasty: "南宋", name: "賈似道", avatar: "🦗", title: "蟋蟀宰相", color: "#f5cd79", likes: 0, stats: { "玩物喪志": 100, "瞞報力": 100, "鬥蟋蟀": 100 }, gossip: "<b>🦗 黑料：國家快滅了還在鬥蟋蟀！</b><br>蒙古軍隊都已經打到家門口了，他身為國家總理，居然隱瞞戰情報喜不報憂，自己天天躲在花園裡趴在地上跟別人鬥蟋蟀！" },
+            { dynasty: "北宋", name: "米芾", avatar: "🧼", title: "有嚴重潔癖的拜石狂人", color: "#546de5", likes: 0, stats: { "書法力": 100, "潔癖度": 100, "拜石頭": 100 }, gossip: "<b>🪨 黑料：對著石頭叫大哥！</b><br>潔癖超級嚴重，洗手要洗半天不碰毛巾等風乾。看到一塊長得很奇特的石頭，居然穿上官服對著石頭下跪叫「石大哥」，根本是瘋子藝術家！" },
+            { dynasty: "北宋", name: "蔡京", avatar: "🖌️", title: "字寫超好卻是大貪官", color: "#3d3d3d", likes: 0, stats: { "書法力": 99, "貪汙力": 100, "餓死度": 100 }, gossip: "<b>💀 黑料：貪汙貪到最後被活活餓死！</b><br>書法寫得超級好，但當宰相時瘋狂貪汙陷害忠良。晚年被流放時，百姓恨透他，沒有一家店願意賣食物給他，最後帶著滿車金銀珠寶活活餓死！" },
+            { dynasty: "北宋", name: "高俅", avatar: "⚽", title: "踢足球踢成國防部長", color: "#c44569", likes: 0, stats: { "踢球力": 100, "拍馬屁": 100, "帶兵力": 0 }, gossip: "<b>🥅 黑料：不會打仗只會踢球！</b><br>本來是個小混混，因為足球（蹴鞠）踢得超級好，被喜歡踢球的皇帝看中，一路破格提拔成了國防部長（太尉）！把軍隊搞得亂七八糟！" },
+            { dynasty: "北宋", name: "宋欽宗", avatar: "😭", title: "被老爸坑死的倒楣鬼", color: "#786fa6", likes: 0, stats: { "倒楣度": 100, "懦弱度": 100, "被俘虜": 100 }, gossip: "<b>🤦‍♂️ 黑料：找道士做法打仗？</b><br>敵軍兵臨城下，老爸（宋徽宗）把皇位丟給他。他竟然不派正規軍，而是找了個騙子道士帶領「神兵」做法術想嚇退敵人，結果城門大開被敵軍直接活捉！" },
+            { dynasty: "遼國", name: "耶律阿保機", avatar: "🗡️", title: "騙老婆殺功臣的腹黑男", color: "#cf6a87", likes: 0, stats: { "腹黑度": 100, "借刀殺人": 100, "建國力": 95 }, gossip: "<b>👩‍⚖️ 黑料：讓老婆幫忙做髒活！</b><br>想殺掉不聽話的功臣又不想弄髒自己的手，就跟老婆（述律平）串通好，讓老婆擺下鴻門宴把功臣全部毒死砍頭，自己裝無辜！" },
+            { dynasty: "元朝", name: "忽必烈", avatar: "🍖", title: "胖到騎不上馬的征服者", color: "#f19066", likes: 0, stats: { "統御力": 100, "痛風度": 100, "體重": 99 }, gossip: "<b>🐘 黑料：只能騎四頭大象抬的木塔！</b><br>年輕時是超猛騎兵，晚年每天瘋狂吃烤肉喝酒，胖到得嚴重痛風，連馬都騎不上去！打仗出巡時只能坐在由四頭大象扛著的木頭城堡裡！" },
+            { dynasty: "明朝", name: "朱允炆", avatar: "✂️", title: "削藩削到自己沒了的皇帝", color: "#54a0ff", likes: 0, stats: { "心急度": 100, "失蹤力": 100, "政治力": 10 }, gossip: "<b>🔥 黑料：操之過急被叔叔趕跑！</b><br>當上皇帝後急著把叔叔們的兵權搶過來（削藩），結果逼得最強的叔叔（朱棣）造反打進首都。他最後在皇宮放了把火，從此人間蒸發再也找不到人！" },
+            { dynasty: "明朝", name: "朱厚照", avatar: "🐆", title: "愛玩動物園的豹房皇帝", color: "#00d2d3", likes: 0, stats: { "愛玩度": 100, "建動物園": 100, "荒唐度": 99 }, gossip: "<b>🎪 黑料：在皇宮裡蓋猛獸動物園！</b><br>不想當皇帝只想玩，在皇宮旁邊蓋了一個「豹房」，裡面養滿了豹子、老虎等猛獸。還給自己封了一個「大將軍」的稱號，天天假裝自己是將軍出門打仗！" },
+            { dynasty: "明朝", name: "嚴嵩", avatar: "👴", title: "史上最老貪官", color: "#5f27cd", likes: 0, stats: { "貪汙力": 100, "壽命": 99, "奸臣度": 100 }, gossip: "<b>🤑 黑料：八十幾歲還在瘋狂貪汙！</b><br>把持朝政二十多年，貪汙的錢多到數不清。最狂的是他活到八十幾歲還在死命抓著權力不放，最後被抄家時，連皇帝都嚇到他家到底多有錢！" },
+            { dynasty: "明朝", name: "崇禎", avatar: "🍳", title: "甩鍋大師末代皇帝", color: "#222f3e", likes: 0, stats: { "甩鍋力": 100, "殺大臣": 100, "上吊力": 100 }, gossip: "<b>🤷‍♂️ 黑料：都是別人的錯！</b><br>超級勤奮但疑心病超重，在位17年換了幾十個宰相，一出事就把責任推給大臣然後砍頭。國家滅亡去上吊前，還寫遺書說：「不是我的錯，都是大臣誤了我！」" },
+            { dynasty: "明朝", name: "吳三桂", avatar: "💇‍♀️", title: "衝冠一怒為紅顏渣男", color: "#ee5253", likes: 0, stats: { "背叛力": 100, "漢奸度": 100, "愛生氣": 90 }, gossip: "<b>🚪 黑料：為了一個女生把國家賣了！</b><br>本來負責防守清軍，聽說自己的愛妾（陳圓圓）被流寇搶走，氣到直接打開山海關大門，引清兵入關幫他打仗，成為歷史上最著名的賣國賊！" },
+            { dynasty: "清朝", name: "鰲拜", avatar: "🦁", title: "囂張過頭被小屁孩抓的權臣", color: "#ff9f43", likes: 0, stats: { "武力": 99, "囂張度": 100, "大意度": 100 }, gossip: "<b>👦 黑料：被一群國中生摔跤打敗！</b><br>仗著自己是老臣不把少年康熙放在眼裡。康熙偷偷訓練了一群十幾歲練摔跤的小男孩，等他進宮時，這群小屁孩一擁而上，直接把這個滿洲第一勇士按在地上抓去關！" },
+            { dynasty: "清朝", name: "雍正", avatar: "🩸", title: "過勞死+愛抄家皇帝", color: "#10ac84", likes: 0, stats: { "勤奮度": 100, "抄家力": 100, "刻薄度": 95 }, gossip: "<b>🏠 黑料：最喜歡把別人的家產沒收！</b><br>看誰貪汙或不爽，直接下令抄家沒收財產，人稱「抄家皇帝」。而且是個超級工作狂，每天批改公文到半夜，最後活活把自己累死在辦公桌上！" },
+            { dynasty: "清朝", name: "李蓮英", avatar: "✂️", title: "梳頭上位的大太監", color: "#2e86de", likes: 0, stats: { "梳頭力": 100, "拍馬屁": 100, "貪財度": 95 }, gossip: "<b>💇‍♀️ 黑料：靠幫老奶奶梳頭髮變首富！</b><br>因為特別會幫慈禧太后梳頭髮，加上嘴巴超甜，一路爬到大總管位置。全國官員想見太后都要先給他塞超大包的紅包，富可敵國！" },
+            { dynasty: "清朝", name: "洪秀全", avatar: "📖", title: "沒考上大學就造反的教主", color: "#8395a7", likes: 0, stats: { "落榜次數": 4, "洗腦力": 100, "破壞力": 100 }, gossip: "<b>🔥 黑料：考試考不上，乾脆自己當上帝！</b><br>連續考了四次公務員都落榜，氣到發高燒產生幻覺，醒來就說自己是上帝的二兒子（耶穌的弟弟），創立太平天國造反，差點把清朝打滅亡！" },
+            { dynasty: "近代", name: "汪精衛", avatar: "🕴️", title: "顏值最高的超級漢奸", color: "#c8d6e5", likes: 0, stats: { "顏值": 95, "賣國度": 100, "演講力": 90 }, gossip: "<b>🎌 黑料：長得帥但骨子裡超壞！</b><br>年輕時是敢去刺殺清朝攝政王的熱血帥哥，老了之後卻貪生怕死，在日本侵略中國時竟然跑去投靠日本當魁儡政府的老大，從英雄變成遺臭萬年的漢奸！" },
+            { dynasty: "近代", name: "辜鴻銘", avatar: "🧵", title: "死不剪辮子的怪咖狂人", color: "#576574", likes: 0, stats: { "學霸度": 100, "留辮子": 100, "毒舌力": 95 }, gossip: "<b>💇‍♂️ 黑料：留著清朝辮子在大學教書！</b><br>民國都成立了，大家早就剪頭髮，他還堅持留著清朝的長辮子。被學生笑，他反嗆：「我頭上的辮子是有形的，你們心裡的辮子是無形的！」嗆到沒人敢說話！" },
+// --- 😈 全朝代制霸擴充包 (黑料禁區) ---
+            { 
+                dynasty: "西周", name: "周幽王", avatar: "🐺", title: "放羊的孩子帝王版", color: "#e74c3c", likes: 0, 
+                stats: { "昏庸度": 100, "寵妻力": 100, "亡國力": 100 }, 
+                gossip: "<b>🔥 黑料1：烽火戲諸侯！</b><br>他的愛妃褒姒是個冰山美人，從來不笑。他為了博美人一笑，竟然下令點燃古代用來警告外敵入侵的「烽火台」！<br><br><b>🐺 黑料2：狼來了的悲慘下場！</b><br>各地的諸侯看到烽火，急忙帶軍隊跑來救援，結果發現被騙了，妃子看了哈哈大笑。後來真的有敵人打過來，他再點烽火，已經沒有半個人來救他了，國家直接滅亡！" 
+            },
+            { 
+                dynasty: "戰國", name: "趙括", avatar: "⌨️", title: "紙上談兵的鍵盤軍神", color: "#8e44ad", likes: 0, 
+                stats: { "嘴砲力": 100, "實戰力": 0, "坑隊友": 100 }, 
+                gossip: "<b>📚 黑料1：考試考一百，實戰死一半！</b><br>他從小熟讀兵法，跟老爸討論戰術時連老爸都講不贏他。但老爸早就警告：「這小子只會背書，絕對不能讓他帶兵！」<br><br><b>💀 黑料2：把四十萬大軍推向地獄！</b><br>皇帝不聽勸，派他去打秦國的名將白起。他完全死讀書不看地形，結果四十萬趙國大軍被活活包圍餓死，最後全被活埋，堪稱史上最大地雷隊友！" 
+            },
+            { 
+                dynasty: "西漢", name: "漢景帝", avatar: "♟️", title: "拿棋盤砸死人的暴躁仔", color: "#c0392b", likes: 0, 
+                stats: { "脾氣": 100, "遊戲品": 0, "殘酷度": 90 }, 
+                gossip: "<b>😡 黑料1：玩遊戲輸不起直接殺人！</b><br>他還是太子的時候，跟吳國的世子一起下棋（六博棋）。因為世子下棋贏了他還嘴砲幾句，他竟然氣到直接舉起超重的木頭棋盤，當場把世子給砸死！<br><br><b>🔥 黑料2：導致國家大亂的元凶！</b><br>就因為他砸死了人家的兒子，吳王懷恨在心，等他當上皇帝後，吳王直接發動了超大規模的「七國之亂」，差點把漢朝給掀了！" 
+            },
+            { 
+                dynasty: "西漢", name: "陳阿嬌", avatar: "🏠", title: "金屋藏嬌的恐怖情人", color: "#f368e0", likes: 0, 
+                stats: { "傲嬌度": 100, "嫉妒心": 100, "黑魔法": 95 }, 
+                gossip: "<b>🏰 黑料1：把「金屋藏嬌」變成冷宮！</b><br>漢武帝小時候答應要蓋一棟「金屋」給她住。結果她當上皇后後脾氣超級差，每天吃醋大吵大鬧，讓皇帝看到她就煩！<br><br><b>🧙‍♀️ 黑料2：在皇宮裡玩黑魔法！</b><br>因為嫉妒別的妃子得寵，她竟然找女巫在皇宮裡搞「巫蠱之術」（扎小人詛咒別人）。事情敗露後，皇帝直接把她廢掉關進冷宮，從公主病變成了階下囚！" 
+            },
+            { 
+                dynasty: "東漢", name: "梁冀", avatar: "☠️", title: "毒死小學生的跋扈將軍", color: "#2d3436", likes: 0, 
+                stats: { "貪汙力": 100, "狠毒度": 100, "跋扈度": 100 }, 
+                gossip: "<b>👿 黑料1：被小孩嗆一句就殺人！</b><br>他是東漢權力最大的官，連皇帝都是他選的。八歲的小皇帝（漢質帝）看他不爽，當眾罵了他一句「跋扈將軍」，他竟然在小皇帝的麵餅裡下毒，把八歲的小孩毒死！<br><br><b>💰 黑料2：財產多到國家數不完！</b><br>他貪汙的錢多到誇張，後來被新的皇帝派兵圍剿自殺。抄家時把他的財產賣掉，竟然等於東漢政府整整半年的全國稅收，直接幫國家減稅！" 
+            },
+            { 
+                dynasty: "三國", name: "孫皓", avatar: "🔪", title: "發明恐怖刑罰的變態暴君", color: "#833471", likes: 0, 
+                stats: { "殘暴度": 100, "亡國力": 100, "變態度": 99 }, 
+                gossip: "<b>😱 黑料1：喜歡把人的臉皮剝下來！</b><br>他是東吳的最後一個皇帝。看哪個宮女或大臣不順眼，最喜歡的處罰是剝人臉皮、或者把人的眼睛挖出來，是個心理極度扭曲的恐怖變態！<br><br><b>🏳️ 黑料2：投降後還敢嘴砲！</b><br>晉朝軍隊打過來，他嚇得把自己綁起來投降。被抓到洛陽後，晉朝皇帝故意問他：「聽說你在南方喜歡剝人臉皮？」他竟然還敢回嗆：「對啊，專門剝那些不忠誠的人的臉皮！」" 
+            },
+            { 
+                dynasty: "西晉", name: "賈南風", avatar: "👹", title: "引發八王之亂的惡毒醜女", color: "#1e272e", likes: 0, 
+                stats: { "顏值": 0, "狠毒度": 100, "亂政力": 100 }, 
+                gossip: "<b>👹 黑料1：史上最有名的醜皇后！</b><br>史書記載她長得又黑、又矮、又胖，而且脾氣極端暴躁。因為皇帝老公（晉惠帝）是個智障，她就趁機掌握了國家大權！<br><br><b>🔥 黑料2：用戟丟懷孕的妃子！</b><br>她嫉妒心極強，看到別的妃子懷孕，竟然親自拿著畫戟（長矛）把孕婦的肚子砸過去，導致母子雙亡！她亂搞政治，最後引發了長達十六年的「八王之亂」，把中國推向了幾百年的黑暗時代！" 
+            },
+            { 
+                dynasty: "唐朝", name: "李林甫", avatar: "🍯", title: "口蜜腹劍的笑面虎", color: "#d35400", likes: 0, 
+                stats: { "心機度": 100, "表面功夫": 100, "陷害力": 99 }, 
+                gossip: "<b>🐍 黑料1：「口蜜腹劍」的由來！</b><br>他是唐玄宗時期的宰相，表面上對每個人都笑咪咪、講話超好聽，但肚子裡藏著毒劍！只要覺得你比他強，他轉頭就會想出最陰險的方法把你弄死！<br><br><b>😡 黑料2：故意用外國人當將軍惹大禍！</b><br>為了怕聰明的漢人將軍回京城搶他的宰相位置，他故意建議皇帝大量使用不認識漢字的外國人當將軍（其中一個就是安祿山），結果直接導致了安史之亂，毀了盛唐！" 
+            },
+            { 
+                dynasty: "唐朝", name: "太平公主", avatar: "👸", title: "想複製媽媽的野心家", color: "#f368e0", likes: 0, 
+                stats: { "野心度": 100, "權謀力": 95, "翻車度": 100 }, 
+                gossip: "<b>👑 黑料1：想當武則天2.0！</b><br>她是武則天最寵愛的女兒，從小看著媽媽當皇帝，野心也超級大。她權力最大時，朝廷裡七成的官員都是她的小弟，連皇帝哥哥都怕她！<br><br><b>📉 黑料2：鬥輸了自己的親侄子！</b><br>她太想掌控權力，結果惹到了年輕的侄子（後來的唐玄宗李隆基）。李隆基先下手為強，派兵把她的黨羽全部殺光，最後賜給她一條白綾逼她上吊自殺，女皇夢碎！" 
+            },
+            { 
+                dynasty: "清朝", name: "溥儀", avatar: "🧳", title: "偷自己家東西的末代皇帝", color: "#34495e", likes: 0, 
+                stats: { "亡國力": 100, "偷竊力": 95, "魁儡度": 100 }, 
+                gossip: "<b>🖼️ 黑料1：把國寶偷偷運出皇宮！</b><br>他退位後還住在紫禁城裡，知道自己總有一天會被趕出去。他竟然和弟弟串通，每天把皇宮裡最值錢的古董、名畫（像是《清明上河圖》）藏在包裹裡偷偷運出宮賣錢，偷自己家的東西！<br><br><b>🎌 黑料2：跑去給日本人當魁儡！</b><br>被趕出皇宮後他不甘心，為了重新當上皇帝，竟然跑去東北投靠侵略中國的日本人，當了「偽滿洲國」的魁儡皇帝，成了被歷史唾棄的漢奸！" 
+            }
+        ];
+
+        let currentTab = 'normal';
+        
+        function switchTab(tab) {
+            currentTab = tab;
+            const btnNormal = document.getElementById('btnNormal');
+            const btnDark = document.getElementById('btnDark');
+            const mainTitle = document.getElementById('mainTitle');
+            const subTitle = document.getElementById('subTitle');
+
+            document.getElementById('searchInput').value = '';
+
+            if (tab === 'dark') {
+                document.body.classList.add('dark-mode');
+                btnDark.classList.add('active-dark');
+                btnNormal.classList.remove('active-normal');
+                mainTitle.innerText = "🛑 歷史黑料禁區 🚫";
+                subTitle.innerText = "注意：以下內容破壞人設，請小心服用！";
+            } else {
+                document.body.classList.remove('dark-mode');
+                btnNormal.classList.add('active-normal');
+                btnDark.classList.remove('active-dark');
+                mainTitle.innerText = "📜 古人八卦卡收集冊 🤫";
+                subTitle.innerText = "來看看古代網紅們的真面目！";
+            }
+            
+            renderCards(); 
+            fetchLikes();  
+        }
+
+        function fetchLikes() {
+            if (!db) return; 
+            const peopleArray = currentTab === 'normal' ? normalPeople : darkPeople;
+            const prefix = currentTab === 'dark' ? 'dark_' : '';
+
+            db.collection('gossips').get().then((querySnapshot) => {
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const docId = doc.id;
+                    peopleArray.forEach((person) => {
+                        if (docId === prefix + person.name) {
+                            person.likes = data.likes || 0;
+                            const likeElement = document.getElementById(`likeCount_${person.name}`);
+                            if (likeElement) likeElement.innerText = person.likes;
+                        }
+                    });
+                });
+            }).catch(error => console.log("無法取得資料"));
+        }
+
+        // 🌟 核心：產生卡片 (加入自動排序功能) 🌟
+        function renderCards() {
+            const container = document.getElementById('cardContainer');
+            container.innerHTML = ''; 
+            
+            const peopleArray = currentTab === 'normal' ? normalPeople : darkPeople;
+            const searchText = document.getElementById('searchInput').value.toLowerCase();
+            const filterDynasty = document.getElementById('dynastyFilter').value;
+
+            // 1. 先過濾出符合搜尋與下拉選單的人物
+            let filteredPeople = peopleArray.filter(person => {
+                const matchName = person.name.toLowerCase().includes(searchText) || person.title.toLowerCase().includes(searchText);
+                const matchDynasty = filterDynasty === 'all' || person.dynasty.includes(filterDynasty) || (filterDynasty==='上古' && person.dynasty==='商朝');
+                return matchName && matchDynasty;
+            });
+
+            // 2. ⏳ 自動按歷史朝代排序 (核心黑科技)
+            filteredPeople.sort((a, b) => {
+                let indexA = dynastyTimeline.indexOf(a.dynasty);
+                let indexB = dynastyTimeline.indexOf(b.dynasty);
+                
+                // 如果找不到完全一樣的，就找包含的關鍵字
+                if (indexA === -1) indexA = dynastyTimeline.findIndex(d => a.dynasty.includes(d));
+                if (indexB === -1) indexB = dynastyTimeline.findIndex(d => b.dynasty.includes(d));
+                
+                // 如果真的都找不到（例如打錯字），就把他排到最後面
+                if (indexA === -1) indexA = 999;
+                if (indexB === -1) indexB = 999;
+                
+                return indexA - indexB;
+            });
+
+            if (filteredPeople.length === 0) {
+                container.innerHTML = `<div class="no-result">😭 找不到符合條件的古人，換個關鍵字或朝代試試看吧！</div>`;
+                return;
+            }
+
+            // 畫出過濾且排序後的卡片
+            filteredPeople.forEach((person) => {
+                let statsHtml = '';
+                for (let statName in person.stats) {
+                    let statValue = person.stats[statName];
+                    statsHtml += `
+                        <div class="stat-row">
+                            <div class="stat-label">${statName}</div>
+                            <div class="stat-bar-bg"><div class="stat-bar-fill" style="width: ${statValue}%; background: ${person.color}"></div></div>
+                        </div>`;
+                }
+
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.onclick = () => openModal(person.name);
+                
+                card.innerHTML = `
+                    <div class="dynasty">${person.dynasty}</div>
+                    <div class="avatar">${person.avatar}</div>
+                    <div class="name">${person.name}</div>
+                    <div class="title" style="color:${currentTab === 'dark' ? '#ff3f34' : ''}">${person.title}</div>
+                    <div class="stats-container">${statsHtml}</div>
+                    <div class="like-section">
+                        <button class="like-btn" onclick="addLike(event, '${person.name}')">❤️</button>
+                        <span class="like-count" id="likeCount_${person.name}">${person.likes || 0}</span>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function addLike(event, personName) {
+            event.stopPropagation();
+            const peopleArray = currentTab === 'normal' ? normalPeople : darkPeople;
+            const person = peopleArray.find(p => p.name === personName);
+            
+            if (!person) return;
+
+            person.likes = (person.likes || 0) + 1;
+            document.getElementById(`likeCount_${person.name}`).innerText = person.likes;
+            
+            const btn = event.target;
+            btn.style.transform = "scale(1.5)";
+            setTimeout(() => { btn.style.transform = "scale(1)"; }, 200);
+
+            if (db) {
+                const prefix = currentTab === 'dark' ? 'dark_' : '';
+                db.collection('gossips').doc(prefix + person.name).set({ likes: person.likes }, { merge: true });
+            }
+        }
+
+        function openModal(personName) {
+            const peopleArray = currentTab === 'normal' ? normalPeople : darkPeople;
+            const person = peopleArray.find(p => p.name === personName);
+            
+            if (!person) return;
+
+            const modalName = document.getElementById('modalName');
+            modalName.innerText = `【${person.dynasty} · ${person.name}】的${currentTab === 'dark' ? '黑歷史' : '最高機密'}`;
+            modalName.style.color = currentTab === 'dark' ? '#ffdd59' : '#2f3542';
+            document.getElementById('stampText').innerText = currentTab === 'dark' ? '人設崩壞 WARNING' : '絕對機密 TOP SECRET';
+            document.getElementById('modalGossip').innerHTML = person.gossip;
+            document.getElementById('gossipModal').style.display = 'flex';
+        }
+
+        function closeModal() { document.getElementById('gossipModal').style.display = 'none'; }
+        window.onclick = function(event) { if (event.target == document.getElementById('gossipModal')) closeModal(); }
+
+        switchTab('normal');
+    </script>
+</body>
+</html>
